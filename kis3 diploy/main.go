@@ -13,6 +13,8 @@ import (
 func main() {
 	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	
 	// Определение адреса и учетных данных SSH-сервера
 	host := "176.124.213.202"
 	user := "root"
@@ -50,15 +52,22 @@ func main() {
 
 	// 1. Обновляем репозиторий через git pull
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
-	executeCommand(client, "cd kis3_v2r2/ && git pull")
+	if err := executeCommand(client, "cd kis3_v2r2/ && git pull"); err != nil {
+		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
+	}
 
 	// 2. Собираем контейнеры с помощью docker-compose build
 	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	executeCommand(client, "cd kis3_v2r2/ && docker-compose build")
+	if err := executeCommand(client, "cd kis3_v2r2/ && docker-compose build"); err != nil {
+		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
+		// Продолжаем выполнение даже при ошибке
+	}
 
 	// 3. Запускаем контейнеры с помощью docker-compose up -d
 	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	executeCommand(client, "cd kis3_v2r2/ && docker-compose up -d")
+	if err := executeCommand(client, "cd kis3_v2r2/ && docker-compose up -d"); err != nil {
+		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
+	}
 
 	// Создаем читатель для ввода с клавиатуры
 	reader := bufio.NewReader(os.Stdin)
@@ -69,10 +78,10 @@ func main() {
 }
 
 // Вспомогательная функция для выполнения SSH команд
-func executeCommand(client *ssh.Client, command string) {
+func executeCommand(client *ssh.Client, command string) error {
 	session, err := client.NewSession()
 	if err != nil {
-		log.Fatalf("Невозможно создать SSH-сессию: %v", err)
+		return fmt.Errorf("невозможно создать SSH-сессию: %v", err)
 	}
 	defer session.Close()
 
@@ -80,8 +89,5 @@ func executeCommand(client *ssh.Client, command string) {
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 
-	err = session.Run(command)
-	if err != nil {
-		log.Fatalf("Ошибка выполнения команды '%s': %v", command, err)
-	}
+	return session.Run(command)
 }
