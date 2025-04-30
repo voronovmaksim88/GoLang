@@ -49,7 +49,7 @@ func main() {
 		}
 
 		// Проверка длины пути
-		if len(path) > 256 {
+		if len(path) > 240 {
 			fmt.Printf("Длинный путь (%d символов): %s\n", len(path), path)
 			longPathsCount++
 		}
