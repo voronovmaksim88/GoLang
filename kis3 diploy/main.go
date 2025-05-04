@@ -62,14 +62,14 @@ func main() {
 
 	// 2. Собираем контейнеры с помощью docker-compose build
 	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	if err := executeCommand(client, "cd kis3_v2r2/ && docker-compose build"); err != nil {
+	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose build"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
 		// Продолжаем выполнение даже при ошибке
 	}
 
 	// 3. Запускаем контейнеры с помощью docker-compose up -d
 	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	if err := executeCommand(client, "cd kis3_v2r2/ && docker-compose up -d"); err != nil {
+	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose up -d"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
 	}
 
