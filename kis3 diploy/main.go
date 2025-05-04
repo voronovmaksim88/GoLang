@@ -14,7 +14,7 @@ func main() {
 	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
 	red := color.New(color.FgRed).SprintFunc()
-	
+
 	// Определение адреса и учетных данных SSH-сервера
 	host := "176.124.213.202"
 	user := "root"
@@ -44,7 +44,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Невозможно подключиться к SSH-серверу: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("Ошибка при закрытии SSH-клиента: %v", err)
+		}
+	}()
 
 	fmt.Println("Успешное подключение к SSH-серверу")
 
@@ -52,7 +56,7 @@ func main() {
 
 	// 1. Обновляем репозиторий через git pull
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
-	if err := executeCommand(client, "cd kis3_v2r2/ && git pull"); err != nil {
+	if err := executeCommand(client, "cd KIS3_v3r3/ && git pull"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
 	}
 
@@ -83,7 +87,11 @@ func executeCommand(client *ssh.Client, command string) error {
 	if err != nil {
 		return fmt.Errorf("невозможно создать SSH-сессию: %v", err)
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Printf("Ошибка при закрытии SSH-сессии: %v", err)
+		}
+	}()
 
 	// Настройка стандартного вывода и ошибок
 	session.Stdout = os.Stdout
