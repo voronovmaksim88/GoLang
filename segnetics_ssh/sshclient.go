@@ -6,8 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
 	"golang.org/x/crypto/ssh"
 )
+
+func printError(message string) {
+	color.Red(message)
+}
 
 func getUserInput(prompt string) string {
 	fmt.Print(prompt)
@@ -16,36 +21,58 @@ func getUserInput(prompt string) string {
 	return strings.TrimSpace(input)
 }
 
-func main() {
-	// Получаем данные от пользователя
-	host := getUserInput("Введите IP-адрес устройства (например, 192.168.1.1): ")
-	user := getUserInput("Введите имя пользователя: ")
-	password := getUserInput("Введите пароль: ")
+func getDefaultUserInput(prompt string, defaultValue string) string {
+	fmt.Printf("%s [%s]: ", prompt, defaultValue)
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultValue
+	}
+	return input
+}
 
-	// Формируем адрес подключения
+func tryConnect(host, user, password string) (*ssh.Client, error) {
 	addr := host + ":22"
-
-	// Конфигурация SSH клиента
 	config := &ssh.ClientConfig{
 		User: user,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(password),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // Не проверять известные хосты
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	// Подключаемся
-	conn, err := ssh.Dial("tcp", addr, config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка подключения: %v\n", err)
-		return
+	return ssh.Dial("tcp", addr, config)
+}
+
+func main() {
+	var conn *ssh.Client
+	var err error
+
+	for {
+		// Получаем данные от пользователя
+		host := getUserInput("Введите IP-адрес устройства (например, 192.168.1.1): ")
+		user := getDefaultUserInput("Введите имя пользователя", "root")
+		password := getUserInput("Введите пароль: ")
+
+		// Пытаемся подключиться
+		conn, err = tryConnect(host, user, password)
+		if err == nil {
+			break
+		}
+
+		printError(fmt.Sprintf("Ошибка подключения: %v", err))
+		retry := getUserInput("Хотите попробовать снова? (y/n): ")
+		if strings.ToLower(retry) != "y" {
+			return
+		}
 	}
 	defer conn.Close()
 
 	// Создаём сессию
 	session, err := conn.NewSession()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Не удалось создать сессию: %v\n", err)
+		printError(fmt.Sprintf("Не удалось создать сессию: %v", err))
 		return
 	}
 	defer session.Close()
@@ -54,7 +81,7 @@ func main() {
 	cmd := "cat /proc/version"
 	output, err := session.CombinedOutput(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка выполнения команды: %v\n", err)
+		printError(fmt.Sprintf("Ошибка выполнения команды: %v", err))
 		return
 	}
 
