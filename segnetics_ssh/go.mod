@@ -1,4 +1,4 @@
-module myapp
+module add_sequenser_to_segnetics
 
 go 1.24.2
 

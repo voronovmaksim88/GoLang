@@ -21,7 +21,7 @@ func getUserInput(prompt string) string {
 	return strings.TrimSpace(input)
 }
 
-func getDefaultUserInput(prompt string, defaultValue string) string {
+func getDefaultInput(prompt string, defaultValue string) string {
 	fmt.Printf("%s [%s]: ", prompt, defaultValue)
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
@@ -51,9 +51,9 @@ func main() {
 
 	for {
 		// Получаем данные от пользователя
-		host := getUserInput("Введите IP-адрес устройства (например, 192.168.1.1): ")
-		user := getDefaultUserInput("Введите имя пользователя", "root")
-		password := getUserInput("Введите пароль: ")
+		host := getUserInput("Введите IP-адрес устройства (например, 192.168.111.2): ")
+		user := getDefaultInput("Введите имя пользователя", "root")
+		password := getDefaultInput("Введите пароль", "segnetics")
 
 		// Пытаемся подключиться
 		conn, err = tryConnect(host, user, password)
