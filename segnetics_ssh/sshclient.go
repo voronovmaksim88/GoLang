@@ -106,7 +106,7 @@ func main() {
 
 	for {
 		// Получаем данные от пользователя
-		host := getDefaultInput("Введите IP-адрес устройства", "192.168.111.2")
+		host := getDefaultInput("Введите IP-адрес устройства", "192.168.88.32")
 		user := getDefaultInput("Введите имя пользователя", "root")
 		password := getDefaultInput("Введите пароль", "segnetics")
 
@@ -276,6 +276,34 @@ func main() {
 	}
 
 	fmt.Printf("Содержимое директории /etc/opt:\n%s\n", output)
+
+	fmt.Println("Проверяем существование директории projects...")
+
+	// Создаем новую сессию для проверки директории projects
+	session, err = conn.NewSession()
+	if err != nil {
+		printError(fmt.Sprintf("Ошибка создания сессии для проверки директории projects: %v", err))
+		waitForEnter()
+		return
+	}
+	defer session.Close()
+
+	// Проверяем существование директории projects
+	cmd = "test -d /projects && echo 'Directory projects exists' || echo 'Directory projects does not exist'"
+	output, err = session.CombinedOutput(cmd)
+	if err != nil {
+		printError(fmt.Sprintf("Ошибка проверки директории projects: %v", err))
+		waitForEnter()
+		return
+	}
+
+	if strings.Contains(string(output), "does not exist") {
+		printError("Ошибка: директория projects не существует!")
+		waitForEnter()
+		return
+	}
+
+	printSuccess("Директория projects существует, продолжаем...")
 
 	waitForEnter()
 }
