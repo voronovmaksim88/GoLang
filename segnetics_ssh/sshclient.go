@@ -305,5 +305,137 @@ func main() {
 
 	printSuccess("Директория projects существует, продолжаем...")
 
+	fmt.Println("Проверяем существование файла start.after в директории projects...")
+
+	// Создаем новую сессию для проверки файла start.after
+	session, err = conn.NewSession()
+	if err != nil {
+		printError(fmt.Sprintf("Ошибка создания сессии для проверки файла start.after: %v", err))
+		waitForEnter()
+		return
+	}
+	defer session.Close()
+
+	// Проверяем существование файла start.after
+	cmd = "test -f /projects/start.after && echo 'File start.after exists' || echo 'File start.after does not exist'"
+	output, err = session.CombinedOutput(cmd)
+	if err != nil {
+		printError(fmt.Sprintf("Ошибка проверки файла start.after: %v", err))
+		waitForEnter()
+		return
+	}
+
+	if strings.Contains(string(output), "does not exist") {
+		printError("Файл start.after не существует в директории projects")
+	} else {
+		printSuccess("Файл start.after существует в директории projects")
+	}
+
+	// Предлагаем пользователю удалить файл
+	removeFile := getUserInput("Хотите удалить файл start.after? (y/n): ")
+	if strings.ToLower(removeFile) == "y" {
+		fmt.Println("Пытаемся удалить файл start.after...")
+
+		// Создаем новую сессию для удаления файла
+		session, err = conn.NewSession()
+		if err != nil {
+			printError(fmt.Sprintf("Ошибка создания сессии для удаления файла: %v", err))
+			waitForEnter()
+			return
+		}
+		defer session.Close()
+
+		// Удаляем файл
+		cmd = "rm -f /projects/start.after"
+		_, err = session.CombinedOutput(cmd)
+		if err != nil {
+			printError(fmt.Sprintf("Ошибка удаления файла start.after: %v", err))
+		} else {
+			printSuccess("Файл start.after успешно удален")
+
+			// Проверяем, что файл действительно удален
+			session, err = conn.NewSession()
+			if err != nil {
+				printError(fmt.Sprintf("Ошибка создания сессии для проверки удаления: %v", err))
+				waitForEnter()
+				return
+			}
+			defer session.Close()
+
+			cmd = "test -f /projects/start.after && echo 'File still exists' || echo 'File successfully removed'"
+			output, err = session.CombinedOutput(cmd)
+			if err != nil {
+				printError(fmt.Sprintf("Ошибка проверки удаления файла: %v", err))
+			} else {
+				fmt.Printf("Результат проверки: %s", output)
+			}
+		}
+	} else {
+		fmt.Println("Удаление файла start.after отменено")
+	}
+
+	// Копирование файла start.after из локальной директории на сервер
+	fmt.Println("\nПроверяем наличие локального файла start.after...")
+	localStartAfter := "start.after"
+
+	if _, err := os.Stat(localStartAfter); os.IsNotExist(err) {
+		printError("Локальный файл start.after не найден в директории с программой")
+	} else {
+		fmt.Println("Локальный файл start.after найден, начинаем копирование...")
+
+		// Создаем новую сессию для копирования
+		session, err = conn.NewSession()
+		if err != nil {
+			printError(fmt.Sprintf("Ошибка создания сессии для копирования: %v", err))
+			waitForEnter()
+			return
+		}
+		defer session.Close()
+
+		remotePath := "/projects/start.after"
+		fmt.Printf("Копируем %s в %s...\n", localStartAfter, remotePath)
+
+		// Используем нашу функцию copyFile
+		if err := copyFile(session, localStartAfter, remotePath); err != nil {
+			printError(fmt.Sprintf("Ошибка копирования файла: %v", err))
+		} else {
+			printSuccess("Файл start.after успешно скопирован на сервер")
+
+			// Проверяем, что файл появился на сервере
+			session, err = conn.NewSession()
+			if err != nil {
+				printError(fmt.Sprintf("Ошибка создания сессии для проверки: %v", err))
+				waitForEnter()
+				return
+			}
+			defer session.Close()
+
+			cmd = fmt.Sprintf("ls -la %s", remotePath)
+			output, err = session.CombinedOutput(cmd)
+			if err != nil {
+				printError(fmt.Sprintf("Ошибка проверки файла на сервере: %v", err))
+			} else {
+				fmt.Printf("Файл на сервере:\n%s\n", output)
+
+				// Выводим первые 10 строк файла для проверки
+				session, err = conn.NewSession()
+				if err != nil {
+					printError(fmt.Sprintf("Ошибка создания сессии для проверки содержимого: %v", err))
+					waitForEnter()
+					return
+				}
+				defer session.Close()
+
+				cmd = fmt.Sprintf("head -n 10 %s", remotePath)
+				output, err = session.CombinedOutput(cmd)
+				if err != nil {
+					printError(fmt.Sprintf("Ошибка чтения начала файла: %v", err))
+				} else {
+					fmt.Printf("Первые 10 строк файла:\n%s\n", output)
+				}
+			}
+		}
+	}
+
 	waitForEnter()
 }
