@@ -1,2 +1,3 @@
 #Добавляем секвенсер в фоновые задачи чтоб он там непрерывно обрабатывался
-php /opt/sequencer_v1r6.php &
+sleep 3
+php /etc/opt/sequencer_v1r6.php &
