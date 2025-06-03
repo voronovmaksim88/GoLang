@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/fatih/color"
 	_ "github.com/go-sql-driver/mysql"
@@ -70,6 +71,22 @@ func main() {
 		// Выводим номера заказов
 		printOrders(orders)
 	}
+
+	// Создаем словарь заказов из БД
+	dbOrderDict, err := createMariaDBOrderDict(db, currentYear)
+	if err != nil {
+		color.Red("Ошибка создания словаря заказов из БД: %v", err)
+		waitForEnter()
+		os.Exit(1)
+	}
+
+	if len(dbOrderDict) == 0 {
+		color.Yellow("В базе данных нет заказов за %d год", currentYear)
+	} else {
+		color.Green("\nУспешно загружено %d заказов из базы данных", len(dbOrderDict))
+	}
+
+	printOrderStats(orders, dbOrderDict)
 
 	waitForEnter()
 }
@@ -202,4 +219,73 @@ func isDigit(s string) bool {
 		}
 	}
 	return true
+}
+
+// createMariaDBOrderDict создает словарь заказов из MariaDB (номер заказа: id клиента)
+func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
+	// Создаем словарь для хранения результатов
+	orderDict := make(map[string]string)
+
+	// Выполняем SQL-запрос
+	rows, err := db.Query("SELECT serial, client FROM task")
+	if err != nil {
+		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
+			if fprintfErr != nil {
+				// Логируем ошибку fmt.Fprintf, если она произошла
+				fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
+			}
+		}
+	}()
+
+	// Преобразуем год в строку для сравнения
+	yearStr := strconv.Itoa(year)
+
+	// Обрабатываем результаты
+	for rows.Next() {
+		var serial, client string
+		if err := rows.Scan(&serial, &client); err != nil {
+			return nil, fmt.Errorf("ошибка чтения строки: %v", err)
+		}
+
+		// Проверяем формат номера заказа (XXX-MM-YYYY)
+		parts := strings.Split(serial, "-")
+		if len(parts) == 3 && len(parts[2]) == 4 && len(parts[1]) == 2 {
+			// Сравниваем год в номере заказа
+			if parts[2] == yearStr {
+				orderDict[serial] = client
+			}
+		}
+	}
+
+	// Проверяем ошибки после итерации
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
+	}
+
+	return orderDict, nil
+}
+
+// printOrderStats выводит статистику заказов
+func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
+	color.Cyan("\nСтатистика заказов:")
+	color.Blue("Найдено в папках: %d", len(folderOrders))
+	color.Blue("Найдено в базе данных: %d", len(dbOrders))
+
+	// Проверяем, какие заказы из базы данных отсутствуют в папках
+	missingCount := 0
+	for order := range dbOrders {
+		if _, exists := folderOrders[order]; !exists {
+			missingCount++
+		}
+	}
+
+	if missingCount > 0 {
+		color.Yellow("Заказов в БД, но отсутствующих в папках: %d", missingCount)
+	} else {
+		color.Green("Все заказы из БД присутствуют в папках")
+	}
 }
