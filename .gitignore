@@ -1,4 +1,6 @@
 .env
 .xml
+*.xml
+*.iml
 .iml
 .idea/
