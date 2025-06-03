@@ -21,20 +21,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Формируем строку подключения для MariaDB
-	connString := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s",
-		os.Getenv("USER"),
-		os.Getenv("PASSWORD"),
-		os.Getenv("HOST"),
-		os.Getenv("PORT"),
-		os.Getenv("NAME"),
-	)
-
-	// Пытаемся подключиться к базе данных
-	db, err := sql.Open("mysql", connString)
+	// Подключаемся к базе данных
+	db, err := connectToDB()
 	if err != nil {
-		color.Red("Ошибка открытия соединения с базой данных: %v", err)
+		color.Red("Ошибка подключения к базе данных: %v", err)
 		waitForEnter()
 		os.Exit(1)
 	}
@@ -46,47 +36,60 @@ func main() {
 		}
 	}()
 
-	// Проверяем подключение
-	err = db.Ping()
+	// Получаем текущий год из структуры папок
+	currentYear, err := getCurrentYear()
 	if err != nil {
-		color.Red("Ошибка ping базы данных: %v", err)
+		color.Red("Ошибка определения года: %v", err)
 		waitForEnter()
 		os.Exit(1)
 	}
 
-	// Выводим сообщение об успехе
-	color.Green("Успешное подключение к базе данных MariaDB!")
-
-	// Получаем текущую директорию
-	currentDir, err := os.Getwd()
-	if err != nil {
-		color.Red("Ошибка получения текущей директории: %v", err)
-		waitForEnter()
-		os.Exit(1)
-	}
-
-	// Получаем родительскую директорию
-	parentDir := filepath.Dir(currentDir)
-	folderName := filepath.Base(parentDir)
-
-	// Проверяем, является ли имя родительской папки числом (годом)
-	year, err := strconv.Atoi(folderName)
-	if err != nil || year < 2000 || year > 9999 {
-		color.Red("Перенесите папку со скриптом в папку с заказами")
-		waitForEnter()
-		os.Exit(1)
-	}
-
-	// Выводим сообщение и сохраняем год
-	color.Green("Будут проанализированы заказы за %d год", year)
-
-	// Сохраняем год в переменную для дальнейшего использования
-	currentYear := year
-
-	// Для примера выводим сохраненный год
+	color.Green("Будут проанализированы заказы за %d год", currentYear)
 	fmt.Printf("Год сохранен в переменную: %d\n", currentYear)
 
 	waitForEnter()
+}
+
+// connectToDB устанавливает соединение с базой данных
+func connectToDB() (*sql.DB, error) {
+	connString := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s",
+		os.Getenv("USER"),
+		os.Getenv("PASSWORD"),
+		os.Getenv("HOST"),
+		os.Getenv("PORT"),
+		os.Getenv("NAME"),
+	)
+
+	db, err := sql.Open("mysql", connString)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка открытия соединения: %v", err)
+	}
+
+	if err = db.Ping(); err != nil {
+		return nil, fmt.Errorf("ошибка ping базы данных: %v", err)
+	}
+
+	color.Green("Успешное подключение к базе данных MariaDB!")
+	return db, nil
+}
+
+// getCurrentYear определяет год на основе структуры папок
+func getCurrentYear() (int, error) {
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return 0, fmt.Errorf("ошибка получения текущей директории: %v", err)
+	}
+
+	parentDir := filepath.Dir(currentDir)
+	folderName := filepath.Base(parentDir)
+
+	year, err := strconv.Atoi(folderName)
+	if err != nil || year < 2000 || year > 9999 {
+		return 0, fmt.Errorf("перенесите папку со скриптом в папку с заказами")
+	}
+
+	return year, nil
 }
 
 // waitForEnter ожидает нажатия Enter с обработкой возможной ошибки
