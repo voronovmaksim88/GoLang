@@ -17,8 +17,7 @@ func main() {
 	err := godotenv.Load()
 	if err != nil {
 		color.Red("Ошибка загрузки .env файла: %v", err)
-		fmt.Println("\n Нажмите Enter для выхода...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
 
@@ -36,18 +35,22 @@ func main() {
 	db, err := sql.Open("mysql", connString)
 	if err != nil {
 		color.Red("Ошибка открытия соединения с базой данных: %v", err)
-		fmt.Println("\n Нажмите Enter для выхода...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		if db != nil {
+			if err := db.Close(); err != nil {
+				color.Red("Ошибка закрытия соединения с БД: %v", err)
+			}
+		}
+	}()
 
 	// Проверяем подключение
 	err = db.Ping()
 	if err != nil {
 		color.Red("Ошибка ping базы данных: %v", err)
-		fmt.Println("\n Нажмите Enter для выхода...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
 
@@ -58,8 +61,7 @@ func main() {
 	currentDir, err := os.Getwd()
 	if err != nil {
 		color.Red("Ошибка получения текущей директории: %v", err)
-		fmt.Println("\n Нажмите Enter для выхода...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
 
@@ -71,8 +73,7 @@ func main() {
 	year, err := strconv.Atoi(folderName)
 	if err != nil || year < 2000 || year > 9999 {
 		color.Red("Перенесите папку со скриптом в папку с заказами")
-		fmt.Println("\n Нажмите Enter для выхода...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
 
@@ -85,6 +86,14 @@ func main() {
 	// Для примера выводим сохраненный год
 	fmt.Printf("Год сохранен в переменную: %d\n", currentYear)
 
-	fmt.Println("\n Нажмите Enter для выхода...")
-	fmt.Scanln()
+	waitForEnter()
+}
+
+// waitForEnter ожидает нажатия Enter с обработкой возможной ошибки
+func waitForEnter() {
+	fmt.Println("\nНажмите Enter для выхода...")
+	_, err := fmt.Scanln()
+	if err != nil && err.Error() != "unexpected newline" {
+		color.Red("Ошибка при ожидании ввода: %v", err)
+	}
 }
