@@ -1,4 +1,4 @@
-module my-db-checker
+module create_new_folder_go
 
 go 1.24.2
 
