@@ -1,4 +1,4 @@
-/.env
-/.xml
-/.iml
-
+.env
+.xml
+.iml
+.idea/
