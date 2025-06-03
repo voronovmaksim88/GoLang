@@ -56,8 +56,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Выводим номера заказов
-	printOrders(orders)
+	// Проверяем, есть ли заказы
+	if len(orders) == 0 {
+		color.Yellow("\nНе найдены папки с заказами, продолжить? (y/n)")
+		var answer string
+		_, err := fmt.Scanln(&answer)
+		if err != nil || (answer != "y" && answer != "Y") {
+			color.Yellow("Работа программы прервана.")
+			waitForEnter()
+			os.Exit(0)
+		}
+	} else {
+		// Выводим номера заказов
+		printOrders(orders)
+	}
 
 	waitForEnter()
 }
