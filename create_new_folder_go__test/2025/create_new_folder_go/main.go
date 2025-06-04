@@ -14,7 +14,22 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Константы определены в глобальной области видимости
+const (
+	orderNumberLength = 11 // Длина номера заказа (XXX-MM-YYYY)
+	orderNumberParts  = 3  // Количество частей в номере заказа
+	orderYearLength   = 4  // Длина года (YYYY)
+	orderMonthLength  = 2  // Длина месяца (MM)
+	ordersPerLine     = 5  // Количество заказов в строке для вывода
+	errDBQuery        = "ошибка выполнения запроса: %v"
+	errScanRow        = "ошибка чтения строки: %v"
+	errRowsProcessing = "ошибка при обработке результатов: %v"
+	errCloseRows      = "ошибка закрытия rows: %v\n"
+	errFprintf        = "ошибка записи в stderr: %v\n"
+)
+
 func main() {
+
 	// Загружаем .env файл
 	err := godotenv.Load()
 	if err != nil {
@@ -108,7 +123,6 @@ func main() {
 // printOrders выводит номера заказов отсортированными по 5 в строке
 func printOrders(orders map[string]bool) {
 	color.Cyan("\nНайденные номера заказов по именам папок:")
-	const ordersPerLine = 5
 	// Преобразуем map в slice для сортировки
 	orderList := make([]string, 0, len(orders))
 	for order := range orders {
@@ -214,9 +228,8 @@ func getOrderNumbersInFolder() (map[string]bool, error) {
 			dirName := entry.Name()
 
 			// Проверяем, что имя начинается с 3 цифр и имеет достаточную длину
-			if len(dirName) >= 11 && isDigit(dirName[:3]) {
-				// Берем первые 11 символов как номер заказа
-				orderNumber := dirName[:11]
+			if len(dirName) >= orderNumberLength && isDigit(dirName[:3]) {
+				orderNumber := dirName[:orderNumberLength]
 				orderNumbers[orderNumber] = true
 			}
 		}
@@ -241,23 +254,23 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 
 	rows, err := db.Query("SELECT serial, client FROM task WHERE serial LIKE ?", "%-%-"+yearStr)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
+		return nil, fmt.Errorf(errDBQuery, err)
 	}
 	defer closeRows(rows)
 
 	for rows.Next() {
 		var serial, client string
 		if err := rows.Scan(&serial, &client); err != nil {
-			return nil, fmt.Errorf("ошибка чтения строки: %v", err)
+			return nil, fmt.Errorf(errScanRow, err)
 		}
 		parts := strings.Split(serial, "-")
-		if len(parts) == 3 && len(parts[2]) == 4 && len(parts[1]) == 2 {
+		if len(parts) == orderNumberParts && len(parts[2]) == orderYearLength && len(parts[1]) == orderMonthLength {
 			orderDict[serial] = client
 		}
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
+		return nil, fmt.Errorf(errRowsProcessing, err)
 	}
 
 	return orderDict, nil
@@ -268,20 +281,20 @@ func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
 
 	rows, err := db.Query("SELECT id, name FROM client")
 	if err != nil {
-		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
+		return nil, fmt.Errorf(errDBQuery, err)
 	}
 	defer closeRows(rows)
 
 	for rows.Next() {
 		var id, name string
 		if err := rows.Scan(&id, &name); err != nil {
-			return nil, fmt.Errorf("ошибка чтения строки: %v", err)
+			return nil, fmt.Errorf(errScanRow, err)
 		}
 		clientDict[id] = name
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
+		return nil, fmt.Errorf(errRowsProcessing, err)
 	}
 
 	return clientDict, nil
@@ -311,9 +324,9 @@ func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
 // closeRows закрывает rows и логирует ошибки
 func closeRows(rows *sql.Rows) {
 	if closeErr := rows.Close(); closeErr != nil {
-		_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
+		_, fprintfErr := fmt.Fprintf(os.Stderr, errCloseRows, closeErr)
 		if fprintfErr != nil {
-			fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
+			fmt.Printf(errFprintf, fprintfErr)
 		}
 	}
 }
