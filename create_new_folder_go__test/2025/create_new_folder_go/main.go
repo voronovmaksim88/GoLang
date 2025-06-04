@@ -29,29 +29,6 @@ const (
 )
 
 func main() {
-	// Загружаем переменные окружения из файла .env (например, данные для подключения к БД)
-	err := godotenv.Load()
-	if err != nil {
-		color.Red("Ошибка загрузки .env файла: %v", err)
-		waitForEnter()
-		os.Exit(1)
-	}
-
-	// Устанавливаем соединение с базой данных MariaDB
-	db, err := connectToDB()
-	if err != nil {
-		color.Red("Ошибка подключения к базе данных: %v", err)
-		waitForEnter()
-		os.Exit(1)
-	}
-	// Закрываем соединение с БД при завершении функции main
-	defer func() {
-		if db != nil {
-			if err := db.Close(); err != nil {
-				color.Red("Ошибка закрытия соединения с БД: %v", err)
-			}
-		}
-	}()
 
 	// Определяем текущий год на основе имени родительской папки
 	currentYear, err := getCurrentYear()
@@ -62,8 +39,7 @@ func main() {
 	}
 
 	// Выводим информацию о годе анализа
-	color.Green("Будут проанализированы заказы за %d год", currentYear)
-	fmt.Printf("Год сохранен в переменную: %d\n", currentYear)
+	color.White("\nБудут проанализированы заказы за %d год", currentYear)
 
 	// Получаем список заказов из имен папок в родительской директории
 	orders, err := getOrderNumbersInFolder()
@@ -89,6 +65,30 @@ func main() {
 		printOrders(orders)
 	}
 
+	// Загружаем переменные окружения из файла .env (например, данные для подключения к БД)
+	err = godotenv.Load()
+	if err != nil {
+		color.Red("Ошибка загрузки .env файла: %v", err)
+		waitForEnter()
+		os.Exit(1)
+	}
+
+	// Устанавливаем соединение с базой данных MariaDB
+	db, err := connectToDB()
+	if err != nil {
+		color.Red("Ошибка подключения к базе данных: %v", err)
+		waitForEnter()
+		os.Exit(1)
+	}
+	// Закрываем соединение с БД при завершении функции main
+	defer func() {
+		if db != nil {
+			if err := db.Close(); err != nil {
+				color.Red("Ошибка закрытия соединения с БД: %v", err)
+			}
+		}
+	}()
+
 	// Создаем словарь заказов из базы данных (номер заказа: ID клиента)
 	dbOrderDict, err := createMariaDBOrderDict(db, currentYear)
 	if err != nil {
@@ -101,7 +101,7 @@ func main() {
 	if len(dbOrderDict) == 0 {
 		color.Yellow("В базе данных нет заказов за %d год", currentYear)
 	} else {
-		color.Green("\nУспешно загружено %d заказов из базы данных", len(dbOrderDict))
+		color.Green("Успешно загружено %d заказов из базы данных", len(dbOrderDict))
 	}
 
 	// Создаем словарь клиентов из базы данных (ID клиента: имя клиента)
@@ -154,6 +154,7 @@ func printOrders(orders map[string]bool) {
 		}
 		fmt.Println(line)
 	}
+	fmt.Println("")
 }
 
 // connectToDB устанавливает соединение с базой данных MariaDB
