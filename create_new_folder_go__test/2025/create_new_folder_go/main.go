@@ -1,8 +1,10 @@
 package main
 
 import (
-	"database/sql"  // Пакет для работы с базами данных SQL
-	"fmt"           // Пакет для форматированного ввода-вывода
+	"database/sql" // Пакет для работы с базами данных SQL
+	"fmt"          // Пакет для форматированного ввода-вывода
+	"github.com/joho/godotenv"
+	"io"
 	"os"            // Пакет для работы с операционной системой (файлы, переменные окружения)
 	"path/filepath" // Пакет для работы с путями файловой системы
 	"sort"          // Пакет для сортировки данных
@@ -11,7 +13,6 @@ import (
 
 	"github.com/fatih/color"           // Пакет для цветного вывода в консоль
 	_ "github.com/go-sql-driver/mysql" // Драйвер MySQL для работы с MariaDB
-	"github.com/joho/godotenv"         // Пакет для загрузки переменных окружения из .env файла
 )
 
 // Константы определены в глобальной области видимости
@@ -29,6 +30,14 @@ const (
 )
 
 func main() {
+
+	// Загружаем переменные окружения из файла .env (например, данные для подключения к БД)
+	err := godotenv.Load()
+	if err != nil {
+		color.Red("Ошибка загрузки .env файла: %v", err)
+		waitForEnter()
+		os.Exit(1)
+	}
 
 	// Определяем текущий год на основе имени родительской папки
 	currentYear, err := getCurrentYear()
@@ -63,14 +72,6 @@ func main() {
 	} else {
 		// Выводим список заказов из папок
 		printOrders(orders)
-	}
-
-	// Загружаем переменные окружения из файла .env (например, данные для подключения к БД)
-	err = godotenv.Load()
-	if err != nil {
-		color.Red("Ошибка загрузки .env файла: %v", err)
-		waitForEnter()
-		os.Exit(1)
 	}
 
 	// Устанавливаем соединение с базой данных MariaDB
@@ -119,8 +120,12 @@ func main() {
 		color.Green("Успешно загружено %d клиентов из базы данных", len(clientDict))
 	}
 
-	// Выводим статистику заказов, сравнивая данные из папок и базы данных
-	printOrderStats(orders, dbOrderDict)
+	// Выводим статистику заказов и получаем количество отсутствующих заказов
+	missingCount := printOrderStats(orders, dbOrderDict)
+	// Если есть отсутствующие заказы, предлагаем создать для них папки
+	if missingCount > 0 {
+		createMissingOrderFolders(orders, dbOrderDict)
+	}
 
 	// Ожидаем нажатия Enter перед завершением программы
 	waitForEnter()
@@ -326,8 +331,8 @@ func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
 	return clientDict, nil
 }
 
-// printOrderStats выводит статистику заказов, сравнивая данные из папок и базы данных
-func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
+// printOrderStats выводит статистику заказов, сравнивая данные из папок и базы данных, и возвращает количество отсутствующих заказов
+func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) (missingCount int) {
 	color.Cyan("\nСтатистика заказов:")
 	// Выводим количество заказов, найденных в папках
 	color.Blue("Найдено в папках: %d", len(folderOrders))
@@ -335,7 +340,7 @@ func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
 	color.Blue("Найдено в базе данных: %d", len(dbOrders))
 
 	// Подсчитываем заказы, которые есть в базе данных, но отсутствуют в папках
-	missingCount := 0
+	missingCount = 0
 	for order := range dbOrders {
 		if _, exists := folderOrders[order]; !exists {
 			missingCount++
@@ -348,6 +353,8 @@ func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
 	} else {
 		color.Green("Все заказы из БД присутствуют в папках")
 	}
+
+	return missingCount
 }
 
 // closeRows закрывает объект rows и логирует возможные ошибки
@@ -357,5 +364,141 @@ func closeRows(rows *sql.Rows) {
 		if fprintfErr != nil {
 			fmt.Printf(errFprintf, fprintfErr)
 		}
+	}
+}
+
+// createOrderFolder создаёт папку для заказа и необходимые подпапки, копируя шаблоны ТЗ и КП
+func createOrderFolder(folderName string) error {
+	// Получаем текущую директорию
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("ошибка получения текущей директории: %v", err)
+	}
+
+	// Переходим на уровень выше (родительская папка)
+	parentDir := filepath.Dir(currentDir)
+
+	// Формируем путь к основной папке заказа
+	orderDir := filepath.Join(parentDir, folderName)
+
+	// Создаём основную папку заказа, если она ещё не существует
+	if err := os.MkdirAll(orderDir, 0755); err != nil {
+		color.Red("Ошибка при создании папки %s: %v", folderName, err)
+		return fmt.Errorf("ошибка создания папки %s: %v", folderName, err)
+	}
+
+	// Список стандартных подпапок
+	subfolders := []string{
+		"Чеклисты", "Фото и видео", "ТЗ", "Счета входящие", "Схема",
+		"ПО", "Паспорт", "КП", "Документы",
+	}
+
+	// Создаём каждую подпапку
+	for _, subfolder := range subfolders {
+		subfolderPath := filepath.Join(orderDir, subfolder)
+		if err := os.MkdirAll(subfolderPath, 0755); err != nil {
+			color.Red("Ошибка при создании подпапки %s: %v", subfolder, err)
+			return fmt.Errorf("ошибка создания подпапки %s: %v", subfolder, err)
+		}
+	}
+
+	// Копируем шаблон ТЗ
+	tzTemplate := filepath.Join(currentDir, "ТЗ.odt")
+	tzDestination := filepath.Join(orderDir, "ТЗ", fmt.Sprintf("%s_ТЗ_в1р1.odt", folderName))
+	if _, err := os.Stat(tzTemplate); err == nil {
+		if err := copyFile(tzTemplate, tzDestination); err != nil {
+			color.Red("Ошибка копирования шаблона ТЗ для %s: %v", folderName, err)
+			return fmt.Errorf("ошибка копирования шаблона ТЗ: %v", err)
+		}
+		color.Green("Шаблон ТЗ скопирован для заказа %s", folderName)
+	} else {
+		color.Yellow("Внимание: Файл шаблона ТЗ не найден по пути: %s", tzTemplate)
+	}
+
+	// Копируем шаблон КП
+	kpTemplate := filepath.Join(currentDir, "КП.xls")
+	kpDestination := filepath.Join(orderDir, "КП", fmt.Sprintf("%s_КП_в1р1.xls", folderName))
+	if _, err := os.Stat(kpTemplate); err == nil {
+		if err := copyFile(kpTemplate, kpDestination); err != nil {
+			color.Red("Ошибка копирования шаблона КП для %s: %v", folderName, err)
+			return fmt.Errorf("ошибка копирования шаблона КП: %v", err)
+		}
+		color.Green("Шаблон КП скопирован для заказа %s", folderName)
+	} else {
+		color.Yellow("Внимание: Файл шаблона КП не найден по пути: %s", kpTemplate)
+	}
+
+	return nil
+}
+
+// copyFile копирует файл из src в dst
+func copyFile(src, dst string) error {
+	// Открываем исходный файл для чтения
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("ошибка открытия исходного файла %s: %v", src, err)
+	}
+	// Закрываем исходный файл и логируем возможные ошибки
+	defer func() {
+		if closeErr := sourceFile.Close(); closeErr != nil {
+			color.Red("Ошибка закрытия исходного файла %s: %v", src, closeErr)
+		}
+	}()
+
+	// Создаём целевой файл
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("ошибка создания целевого файла %s: %v", dst, err)
+	}
+	// Закрываем целевой файл и логируем возможные ошибки
+	defer func() {
+		if closeErr := destFile.Close(); closeErr != nil {
+			color.Red("Ошибка закрытия целевого файла %s: %v", dst, closeErr)
+		}
+	}()
+
+	// Копируем содержимое файла
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("ошибка копирования файла %s в %s: %v", src, dst, err)
+	}
+
+	// Устанавливаем права доступа для целевого файла
+	if err := destFile.Chmod(0644); err != nil {
+		return fmt.Errorf("ошибка установки прав для файла %s: %v", dst, err)
+	}
+
+	return nil
+}
+
+// createMissingOrderFolders запрашивает у пользователя создание папок для отсутствующих заказов и завершает программу при ошибке
+func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string]string) {
+	// Собираем заказы, которые есть в базе данных, но отсутствуют в папках
+	var missingOrders []string
+	for order := range dbOrders {
+		if _, exists := folderOrders[order]; !exists {
+			missingOrders = append(missingOrders, order)
+		}
+	}
+
+	// Запрашиваем подтверждение на создание папок
+	color.Cyan("Создать папки для отсутствующих заказов? (y/n)")
+	var answer string
+	_, err := fmt.Scanln(&answer)
+	if err != nil || (answer != "y" && answer != "Y") {
+		// Если пользователь отказался или произошла ошибка ввода, выводим сообщение об отмене
+		color.Yellow("Создание папок отменено пользователем")
+		return
+	}
+
+	// Создаём папку для каждого отсутствующего заказа
+	for _, order := range missingOrders {
+		if err := createOrderFolder(order); err != nil {
+			// При ошибке выводим сообщение и завершаем программу
+			color.Red("Не удалось создать папку для заказа %s: %v", order, err)
+			waitForEnter()
+			os.Exit(1)
+		}
+		// Сообщаем об успешном создании папки
+		color.Green("Папка для заказа %s успешно создана", order)
 	}
 }
