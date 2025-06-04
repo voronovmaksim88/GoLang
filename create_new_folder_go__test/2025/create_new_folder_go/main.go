@@ -386,7 +386,7 @@ func createOrderFolder(folderName string) error {
 		color.Red("Ошибка при создании папки %s: %v", folderName, err)
 		return fmt.Errorf("ошибка создания папки %s: %v", folderName, err)
 	}
-	color.Green("Основная папка для заказа %s успешно создана", folderName)
+	color.Green("\nОсновная папка для заказа %s успешно создана", folderName)
 
 	// Список стандартных подпапок
 	subfolders := []string{
