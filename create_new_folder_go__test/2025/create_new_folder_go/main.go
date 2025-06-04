@@ -124,7 +124,7 @@ func main() {
 	missingCount := printOrderStats(orders, dbOrderDict)
 	// Если есть отсутствующие заказы, предлагаем создать для них папки
 	if missingCount > 0 {
-		createMissingOrderFolders(orders, dbOrderDict)
+		createMissingOrderFolders(orders, dbOrderDict, clientDict)
 	}
 
 	// Ожидаем нажатия Enter перед завершением программы
@@ -368,7 +368,7 @@ func closeRows(rows *sql.Rows) {
 }
 
 // createOrderFolder создаёт папку для заказа и необходимые подпапки, копируя шаблоны ТЗ и КП
-func createOrderFolder(folderName string) error {
+func createOrderFolder(folderName string, clientDict map[string]string, dbOrders map[string]string) error {
 	// Получаем текущую директорию
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -378,15 +378,30 @@ func createOrderFolder(folderName string) error {
 	// Переходим на уровень выше (родительская папка)
 	parentDir := filepath.Dir(currentDir)
 
+	// Получаем имя клиента по ID из dbOrders, если оно есть
+	clientName := "Unknown"
+	if clientID, exists := dbOrders[folderName]; exists {
+		if name, found := clientDict[clientID]; found {
+			// Заменяем недопустимые символы в имени клиента на '_'
+			invalidChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+			clientName = name
+			for _, char := range invalidChars {
+				clientName = strings.ReplaceAll(clientName, char, "_")
+			}
+		}
+	}
+
+	// Формируем имя папки в формате НомерЗаказа_ИмяКлиента
+	fullFolderName := fmt.Sprintf("%s_%s", folderName, clientName)
 	// Формируем путь к основной папке заказа
-	orderDir := filepath.Join(parentDir, folderName)
+	orderDir := filepath.Join(parentDir, fullFolderName)
 
 	// Создаём основную папку заказа, если она ещё не существует
 	if err := os.MkdirAll(orderDir, 0755); err != nil {
-		color.Red("Ошибка при создании папки %s: %v", folderName, err)
-		return fmt.Errorf("ошибка создания папки %s: %v", folderName, err)
+		color.Red("Ошибка при создании папки %s: %v", fullFolderName, err)
+		return fmt.Errorf("ошибка создания папки %s: %v", fullFolderName, err)
 	}
-	color.Green("\nОсновная папка для заказа %s успешно создана", folderName)
+	color.Green("\nОсновная папка для заказа %s успешно создана", fullFolderName)
 
 	// Список стандартных подпапок
 	subfolders := []string{
@@ -408,10 +423,10 @@ func createOrderFolder(folderName string) error {
 	tzDestination := filepath.Join(orderDir, "ТЗ", fmt.Sprintf("%s_ТЗ_в1р1.odt", folderName))
 	if _, err := os.Stat(tzTemplate); err == nil {
 		if err := copyFile(tzTemplate, tzDestination); err != nil {
-			color.Red("Ошибка копирования шаблона ТЗ для %s: %v", folderName, err)
+			color.Red("Ошибка копирования шаблона ТЗ для %s: %v", fullFolderName, err)
 			return fmt.Errorf("ошибка копирования шаблона ТЗ: %v", err)
 		}
-		color.Green("Шаблон ТЗ скопирован для заказа %s", folderName)
+		color.Green("Шаблон ТЗ скопирован для заказа %s", fullFolderName)
 	} else {
 		color.Yellow("Внимание: Файл шаблона ТЗ не найден по пути: %s", tzTemplate)
 	}
@@ -421,10 +436,10 @@ func createOrderFolder(folderName string) error {
 	kpDestination := filepath.Join(orderDir, "КП", fmt.Sprintf("%s_КП_в1р1.xls", folderName))
 	if _, err := os.Stat(kpTemplate); err == nil {
 		if err := copyFile(kpTemplate, kpDestination); err != nil {
-			color.Red("Ошибка копирования шаблона КП для %s: %v", folderName, err)
+			color.Red("Ошибка копирования шаблона КП для %s: %v", fullFolderName, err)
 			return fmt.Errorf("ошибка копирования шаблона КП: %v", err)
 		}
-		color.Green("Шаблон КП скопирован для заказа %s", folderName)
+		color.Green("Шаблон КП скопирован для заказа %s", fullFolderName)
 	} else {
 		color.Yellow("Внимание: Файл шаблона КП не найден по пути: %s", kpTemplate)
 	}
@@ -472,7 +487,7 @@ func copyFile(src, dst string) error {
 }
 
 // createMissingOrderFolders запрашивает у пользователя создание папок для отсутствующих заказов и завершает программу при ошибке
-func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string]string) {
+func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string]string, clientDict map[string]string) {
 	// Собираем заказы, которые есть в базе данных, но отсутствуют в папках
 	var missingOrders []string
 	for order := range dbOrders {
@@ -493,7 +508,7 @@ func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string
 
 	// Создаём папку для каждого отсутствующего заказа
 	for _, order := range missingOrders {
-		if err := createOrderFolder(order); err != nil {
+		if err := createOrderFolder(order, clientDict, dbOrders); err != nil {
 			// При ошибке выводим сообщение и завершаем программу
 			color.Red("Не удалось создать папку для заказа %s: %v", order, err)
 			waitForEnter()
