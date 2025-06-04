@@ -235,13 +235,11 @@ func isDigit(s string) bool {
 	return true
 }
 
-// createMariaDBOrderDict создает словарь заказов из MariaDB (номер заказа: id клиента)
 func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
-	// Создаем словарь для хранения результатов
 	orderDict := make(map[string]string)
+	yearStr := strconv.Itoa(year)
 
-	// Выполняем SQL-запрос
-	rows, err := db.Query("SELECT serial, client FROM task")
+	rows, err := db.Query("SELECT serial, client FROM task WHERE serial LIKE ?", "%-%-"+yearStr)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
 	}
@@ -254,27 +252,17 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 		}
 	}()
 
-	// Преобразуем год в строку для сравнения
-	yearStr := strconv.Itoa(year)
-
-	// Обрабатываем результаты
 	for rows.Next() {
 		var serial, client string
 		if err := rows.Scan(&serial, &client); err != nil {
 			return nil, fmt.Errorf("ошибка чтения строки: %v", err)
 		}
-
-		// Проверяем формат номера заказа (XXX-MM-YYYY)
 		parts := strings.Split(serial, "-")
 		if len(parts) == 3 && len(parts[2]) == 4 && len(parts[1]) == 2 {
-			// Сравниваем год в номере заказа
-			if parts[2] == yearStr {
-				orderDict[serial] = client
-			}
+			orderDict[serial] = client
 		}
 	}
 
-	// Проверяем ошибки после итерации
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
 	}
