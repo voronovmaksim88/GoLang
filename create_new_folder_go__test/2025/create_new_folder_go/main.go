@@ -243,14 +243,7 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
-			_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
-			if fprintfErr != nil {
-				fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
-			}
-		}
-	}()
+	defer closeRows(rows)
 
 	for rows.Next() {
 		var serial, client string
@@ -270,26 +263,15 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 	return orderDict, nil
 }
 
-// createMariaDBClientDict создает словарь клиентов из MariaDB (id клиента: имя клиента)
 func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
-	// Создаем словарь для хранения результатов
 	clientDict := make(map[string]string)
 
-	// Выполняем SQL-запрос
 	rows, err := db.Query("SELECT id, name FROM client")
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
-			_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
-			if fprintfErr != nil {
-				fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
-			}
-		}
-	}()
+	defer closeRows(rows)
 
-	// Обрабатываем результаты
 	for rows.Next() {
 		var id, name string
 		if err := rows.Scan(&id, &name); err != nil {
@@ -298,7 +280,6 @@ func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
 		clientDict[id] = name
 	}
 
-	// Проверяем ошибки после итерации
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
 	}
@@ -324,5 +305,15 @@ func printOrderStats(folderOrders map[string]bool, dbOrders map[string]string) {
 		color.Yellow("Заказов в БД, но отсутствующих в папках: %d", missingCount)
 	} else {
 		color.Green("Все заказы из БД присутствуют в папках")
+	}
+}
+
+// closeRows закрывает rows и логирует ошибки
+func closeRows(rows *sql.Rows) {
+	if closeErr := rows.Close(); closeErr != nil {
+		_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
+		if fprintfErr != nil {
+			fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
+		}
 	}
 }
