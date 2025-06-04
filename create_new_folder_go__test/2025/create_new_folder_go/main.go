@@ -86,6 +86,20 @@ func main() {
 		color.Green("\nУспешно загружено %d заказов из базы данных", len(dbOrderDict))
 	}
 
+	// Создаем словарь клиентов из БД
+	clientDict, err := createMariaDBClientDict(db)
+	if err != nil {
+		color.Red("Ошибка создания словаря клиентов из БД: %v", err)
+		waitForEnter()
+		os.Exit(1)
+	}
+
+	if len(clientDict) == 0 {
+		color.Yellow("В базе данных нет клиентов")
+	} else {
+		color.Green("Успешно загружено %d клиентов из базы данных", len(clientDict))
+	}
+
 	printOrderStats(orders, dbOrderDict)
 
 	waitForEnter()
@@ -93,7 +107,7 @@ func main() {
 
 // printOrders выводит номера заказов отсортированными по 5 в строке
 func printOrders(orders map[string]bool) {
-	color.Cyan("\nНайденные номера заказов по именам папок (отсортировано):")
+	color.Cyan("\nНайденные номера заказов по именам папок:")
 	const ordersPerLine = 5
 	// Преобразуем map в slice для сортировки
 	orderList := make([]string, 0, len(orders))
@@ -235,7 +249,6 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 		if closeErr := rows.Close(); closeErr != nil {
 			_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
 			if fprintfErr != nil {
-				// Логируем ошибку fmt.Fprintf, если она произошла
 				fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
 			}
 		}
@@ -267,6 +280,42 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 	}
 
 	return orderDict, nil
+}
+
+// createMariaDBClientDict создает словарь клиентов из MariaDB (id клиента: имя клиента)
+func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
+	// Создаем словарь для хранения результатов
+	clientDict := make(map[string]string)
+
+	// Выполняем SQL-запрос
+	rows, err := db.Query("SELECT id, name FROM client")
+	if err != nil {
+		return nil, fmt.Errorf("ошибка выполнения запроса: %v", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			_, fprintfErr := fmt.Fprintf(os.Stderr, "ошибка закрытия rows: %v\n", closeErr)
+			if fprintfErr != nil {
+				fmt.Printf("ошибка записи в stderr: %v\n", fprintfErr)
+			}
+		}
+	}()
+
+	// Обрабатываем результаты
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, fmt.Errorf("ошибка чтения строки: %v", err)
+		}
+		clientDict[id] = name
+	}
+
+	// Проверяем ошибки после итерации
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("ошибка при обработке результатов: %v", err)
+	}
+
+	return clientDict, nil
 }
 
 // printOrderStats выводит статистику заказов
