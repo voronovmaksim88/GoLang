@@ -95,48 +95,39 @@ func copyFileRemote(conn *ssh.Client, localPath, remotePath string) error {
 	if err != nil {
 		return fmt.Errorf("не удалось создать сессию: %v", err)
 	}
-
-	// Используем анонимную функцию для обработки ошибки закрытия сессии
 	defer closeSession(session)
 
-	// Читаем локальный файл
 	content, err := os.ReadFile(localPath)
 	if err != nil {
 		return fmt.Errorf("ошибка чтения файла %s: %v", localPath, err)
 	}
 
-	// Создаем команду для записи файла
 	cmd := fmt.Sprintf("cat > %s", remotePath)
 	stdin, err := session.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("ошибка создания stdin pipe: %v", err)
 	}
 
-	// Запускаем команду
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("ошибка запуска команды: %v", err)
 	}
 
-	// Отправляем содержимое файла
 	if _, err := stdin.Write(content); err != nil {
 		return fmt.Errorf("ошибка записи в stdin: %v", err)
 	}
 
-	// Закрываем stdin и ждем завершения команды
 	if err := stdin.Close(); err != nil {
 		return fmt.Errorf("ошибка закрытия stdin: %v", err)
 	}
-	if err := session.Wait(); err != nil {
-		return fmt.Errorf("ошибка ожидания завершения команды: %v", err)
-	}
 
-	return nil
+	return session.Wait()
 }
 
 // Новая функция для закрытия сессии
 func closeSession(session *ssh.Session) {
 	if session != nil {
-		if err := session.Close(); err != nil {
+		// Игнорируем ошибку EOF - это нормальное поведение при закрытии сессии
+		if err := session.Close(); err != nil && err.Error() != "EOF" {
 			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
 		}
 	}
@@ -201,9 +192,10 @@ func main() {
 		}
 		defer closeSession(session)
 
+		// Убираем установку Stderr - пусть библиотека сама управляет потоками
 		output, err := session.CombinedOutput(cmd)
 		if err != nil {
-			return "", fmt.Errorf("ошибка выполнения '%s': %v", cmd, err)
+			return "", fmt.Errorf("ошибка выполнения '%s': %v\nВывод: %s", cmd, err, string(output))
 		}
 		return string(output), nil
 	}
@@ -227,10 +219,16 @@ func main() {
 	// 3. ТЕСТИРОВАНИЕ СОЕДИНЕНИЯ
 	fmt.Println("\n=== Тестирование соединения ===")
 
-	if output, err := executeCommand("echo 'Тестовое соединение'"); err != nil {
-		printError(err.Error())
-		waitForEnter()
-		return
+	testCmd := "echo 'Тестовое соединение'"
+	output, err := executeCommand(testCmd)
+	if err != nil {
+		// Проверяем, действительно ли соединение разорвано
+		if _, checkErr := conn.NewSession(); checkErr != nil {
+			printError(fmt.Sprintf("Соединение разорвано: %v", checkErr))
+			waitForEnter()
+			return
+		}
+		printError(fmt.Sprintf("Ошибка выполнения команды: %v", err))
 	} else {
 		printSuccess("Соединение работает корректно")
 		fmt.Printf("Ответ: %s\n", strings.TrimSpace(output))
