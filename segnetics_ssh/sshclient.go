@@ -97,12 +97,7 @@ func copyFileRemote(conn *ssh.Client, localPath, remotePath string) error {
 	}
 
 	// Используем анонимную функцию для обработки ошибки закрытия сессии
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Можно добавить логирование ошибки, если нужно
-			fmt.Printf("Предупреждение: ошибка при закрытии сессии: %v\n", err)
-		}
-	}()
+	defer closeSession(session)
 
 	// Читаем локальный файл
 	content, err := os.ReadFile(localPath)
@@ -138,7 +133,25 @@ func copyFileRemote(conn *ssh.Client, localPath, remotePath string) error {
 	return nil
 }
 
+// Новая функция для закрытия сессии
+func closeSession(session *ssh.Session) {
+	if session != nil {
+		if err := session.Close(); err != nil {
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}
+}
+
+func closeConnection(conn *ssh.Client) {
+	if conn != nil {
+		if err := conn.Close(); err != nil {
+			color.Yellow("Предупреждение: ошибка при закрытии соединения: %v", err)
+		}
+	}
+}
+
 func main() {
+	// Обработка паники и аварийного завершения
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("\nПроизошла непредвиденная ошибка: %v\n", r)
@@ -146,394 +159,204 @@ func main() {
 		}
 	}()
 
+	// 1. УСТАНОВКА СОЕДИНЕНИЯ
+	fmt.Println("=== Установка SSH соединения ===")
+
 	var conn *ssh.Client
 	var err error
-	var session *ssh.Session
 
-	fmt.Println("Начинаем подключение...")
-
+	// Цикл подключения с повторными попытками
 	for {
-		// Получаем данные от пользователя
+		// Запрос учетных данных
 		host := getDefaultInput("Введите IP-адрес устройства", "192.168.88.60")
 		user := getDefaultInput("Введите имя пользователя", "root")
 		password := getDefaultInput("Введите пароль", "segnetics")
 
-		fmt.Printf("Пытаемся подключиться к %s как %s...\n", host, user)
+		fmt.Printf("\nПопытка подключения к %s@%s...\n", user, host)
 
-		// Пытаемся подключиться
+		// Установка соединения
 		conn, err = tryConnect(host, user, password)
 		if err == nil {
-			printSuccess("Подключение успешно установлено!")
+			printSuccess("SSH соединение установлено успешно!")
 			break
 		}
 
 		printError(fmt.Sprintf("Ошибка подключения: %v", err))
-		retry := getUserInput("Хотите попробовать снова? (y/n): ")
+		retry := getUserInput("Повторить попытку? (y/n): ")
 		if strings.ToLower(retry) != "y" {
 			waitForEnter()
 			return
 		}
 	}
-	defer func() {
-		if conn != nil {
-			if err := conn.Close(); err != nil {
-				// Логируем ошибку закрытия соединения
-				fmt.Printf("Предупреждение: ошибка при закрытии SSH соединения: %v\n", err)
-				// Или можно использовать color для выделения сообщения
-				color.Yellow("Предупреждение: ошибка при закрытии SSH соединения: %v", err)
-			}
+	// Гарантированное закрытие соединения при выходе
+	defer closeConnection(conn)
+
+	// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С СЕССИЯМИ
+
+	// executeCommand - выполняет команду через SSH и возвращает результат
+	executeCommand := func(cmd string) (string, error) {
+		session, err := conn.NewSession()
+		if err != nil {
+			return "", fmt.Errorf("ошибка создания сессии: %v", err)
 		}
-	}()
+		defer closeSession(session)
 
-	fmt.Println("Выполняем тестовую команду...")
-
-	// Выполняем простую команду для проверки
-	cmd := "echo 'test connection'"
-	fmt.Printf("Отправляем команду: %s\n", cmd)
-
-	// Создаем новую сессию для команды
-	session, err = conn.NewSession()
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания новой сессии: %v", err))
-		waitForEnter()
-		return
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		output, err := session.CombinedOutput(cmd)
+		if err != nil {
+			return "", fmt.Errorf("ошибка выполнения '%s': %v", cmd, err)
 		}
-	}()
-
-	fmt.Println("Сессия создана, пытаемся выполнить команду...")
-
-	output, err := session.CombinedOutput(cmd)
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка выполнения команды: %v", err))
-		fmt.Println("Проверяем соединение...")
-
-		// Проверяем, живо ли соединение
-		if _, err := conn.NewSession(); err != nil {
-			printError("Соединение потеряно. Попытка переподключения...")
-			waitForEnter()
-			return
-		}
-
-		fmt.Println("Соединение активно, но команда не выполняется")
-		waitForEnter()
-		return
+		return string(output), nil
 	}
 
-	// Выводим результат
-	printSuccess("Команда выполнена успешно. ")
-	fmt.Printf("Результат:\n%s\n", output)
-
-	fmt.Println("Теперь пробуем выполнить cat /proc/version...")
-
-	// Создаем новую сессию для следующей команды
-	session, err = conn.NewSession()
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания сессии для cat: %v", err))
-		waitForEnter()
-		return
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+	// checkPathExists - проверяет существование пути на удаленной машине
+	checkPathExists := func(path string, isFile bool) (bool, error) {
+		var cmd string
+		if isFile {
+			cmd = fmt.Sprintf("test -f %s && echo 'exists' || echo 'not exists'", path)
+		} else {
+			cmd = fmt.Sprintf("test -d %s && echo 'exists' || echo 'not exists'", path)
 		}
-	}()
 
-	cmd = "cat /proc/version"
-	fmt.Printf("Отправляем команду: %s\n", cmd)
-
-	output, err = session.CombinedOutput(cmd)
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка выполнения команды cat: %v", err))
-		waitForEnter()
-		return
-	}
-
-	printSuccess("Команда cat выполнена успешно.")
-	fmt.Printf("Результат:\n%s\n", output)
-
-	fmt.Println("Проверяем существование директории /etc/opt...")
-
-	// Создаем новую сессию для проверки директории
-	session, err = conn.NewSession()
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания сессии для проверки директории: %v", err))
-		waitForEnter()
-		return
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		output, err := executeCommand(cmd)
+		if err != nil {
+			return false, err
 		}
-	}()
+		return strings.Contains(output, "exists"), nil
+	}
 
-	// Проверяем существование директории
-	cmd = "test -d /etc/opt && echo 'Directory exists' || echo 'Directory does not exist'"
-	output, err = session.CombinedOutput(cmd)
+	// 3. ТЕСТИРОВАНИЕ СОЕДИНЕНИЯ
+	fmt.Println("\n=== Тестирование соединения ===")
+
+	if output, err := executeCommand("echo 'Тестовое соединение'"); err != nil {
+		printError(err.Error())
+		waitForEnter()
+		return
+	} else {
+		printSuccess("Соединение работает корректно")
+		fmt.Printf("Ответ: %s\n", strings.TrimSpace(output))
+	}
+
+	// 4. ПРОВЕРКА СИСТЕМНОЙ ИНФОРМАЦИИ
+	fmt.Println("\n=== Системная информация ===")
+
+	// Получение информации о версии ядра
+	if output, err := executeCommand("cat /proc/version"); err != nil {
+		printError(fmt.Sprintf("Ошибка получения версии ядра: %v", err))
+	} else {
+		fmt.Printf("Версия ядра:\n%s\n", output)
+	}
+
+	// 5. РАБОТА С ДИРЕКТОРИЕЙ /etc/opt
+	fmt.Println("\n=== Проверка рабочей директории ===")
+
+	exists, err := checkPathExists("/etc/opt", false)
 	if err != nil {
 		printError(fmt.Sprintf("Ошибка проверки директории: %v", err))
 		waitForEnter()
 		return
 	}
 
-	if strings.Contains(string(output), "does not exist") {
-		printError("Ошибка: директория /etc/opt не существует!")
+	if !exists {
+		printError("Критическая ошибка: директория /etc/opt не существует!")
 		waitForEnter()
 		return
 	}
+	printSuccess("Директория /etc/opt доступна")
 
-	printSuccess("Директория /etc/opt существует, продолжаем...")
+	// 6. КОПИРОВАНИЕ ФАЙЛОВ
+	fmt.Println("\n=== Копирование файлов ===")
 
-	// Копируем файлы
-	files := []string{"sequencer_v1r6.php", "segnetics.php"}
-	for _, file := range files {
-		fmt.Printf("\nНачинаем копирование файла %s...\n", file)
+	filesToCopy := []string{"sequencer_v1r6.php", "segnetics.php"}
+	for _, file := range filesToCopy {
+		localPath := filepath.Join(".", file)
 
-		// Проверяем существование локального файла
-		if _, err := os.Stat(file); os.IsNotExist(err) {
+		// Проверка локального файла
+		if _, err := os.Stat(localPath); os.IsNotExist(err) {
 			printError(fmt.Sprintf("Локальный файл %s не найден", file))
 			continue
 		}
 
-		localPath := filepath.Join(".", file)
-		remotePath := "/etc/opt/" + file // Используем Unix-стиль пути
+		// Копирование на удаленный сервер
+		remotePath := "/etc/opt/" + file
+		fmt.Printf("Копирование %s -> %s...\n", localPath, remotePath)
 
-		fmt.Printf("Копируем %s в %s...\n", localPath, remotePath)
-
-		// Используем новую функцию для копирования
 		if err := copyFileRemote(conn, localPath, remotePath); err != nil {
-			printError(fmt.Sprintf("Ошибка копирования файла %s: %v", file, err))
+			printError(fmt.Sprintf("Ошибка копирования: %v", err))
 		} else {
-			printSuccess(fmt.Sprintf("Файл %s успешно скопирован", file))
+			printSuccess("Файл успешно скопирован")
 		}
 	}
 
-	// Создаем новую сессию для вывода списка файлов
-	fmt.Println("\nВыводим список файлов в /etc/opt:")
-	session, err = conn.NewSession()
+	// 7. РАБОТА С ПРОЕКТАМИ
+	fmt.Println("\n=== Проверка директории projects ===")
+
+	exists, err = checkPathExists("/projects", false)
 	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания сессии для вывода списка файлов: %v", err))
+		printError(fmt.Sprintf("Ошибка проверки директории: %v", err))
 		waitForEnter()
 		return
 	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-		}
-	}()
 
-	// Выполняем команду ls
-	cmd = "ls -l /etc/opt"
-	output, err = session.CombinedOutput(cmd)
+	if !exists {
+		printError("Директория projects не существует!")
+		waitForEnter()
+		return
+	}
+	printSuccess("Директория projects доступна")
+
+	// 8. РАБОТА С ФАЙЛОМ start.after
+	fmt.Println("\n=== Работа с start.after ===")
+
+	startAfterPath := "/projects/start.after"
+	exists, err = checkPathExists(startAfterPath, true)
 	if err != nil {
-		printError(fmt.Sprintf("Ошибка получения списка файлов: %v", err))
-		waitForEnter()
-		return
-	}
+		printError(fmt.Sprintf("Ошибка проверки файла: %v", err))
+	} else if exists {
+		printSuccess("Файл start.after существует")
 
-	fmt.Printf("Содержимое директории /etc/opt:\n%s\n", output)
-
-	fmt.Println("Проверяем существование директории projects...")
-
-	// Создаем новую сессию для проверки директории projects
-	session, err = conn.NewSession()
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания сессии для проверки директории projects: %v", err))
-		waitForEnter()
-		return
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-		}
-	}()
-
-	// Проверяем существование директории projects
-	cmd = "test -d /projects && echo 'Directory projects exists' || echo 'Directory projects does not exist'"
-	output, err = session.CombinedOutput(cmd)
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка проверки директории projects: %v", err))
-		waitForEnter()
-		return
-	}
-
-	if strings.Contains(string(output), "does not exist") {
-		printError("Ошибка: директория projects не существует!")
-		waitForEnter()
-		return
-	}
-
-	printSuccess("Директория projects существует, продолжаем...")
-
-	fmt.Println("Проверяем существование файла start.after в директории projects...")
-
-	// Создаем новую сессию для проверки файла start.after
-	session, err = conn.NewSession()
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка создания сессии для проверки файла start.after: %v", err))
-		waitForEnter()
-		return
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			// Логируем ошибку, но не прерываем выполнение
-			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-		}
-	}()
-
-	// Проверяем существование файла start.after
-	cmd = "test -f /projects/start.after && echo 'File start.after exists' || echo 'File start.after does not exist'"
-	output, err = session.CombinedOutput(cmd)
-	if err != nil {
-		printError(fmt.Sprintf("Ошибка проверки файла start.after: %v", err))
-		waitForEnter()
-		return
-	}
-
-	if strings.Contains(string(output), "does not exist") {
-		printError("Файл start.after не существует в директории projects")
-	} else {
-		printSuccess("Файл start.after существует в директории projects")
-	}
-
-	// Предлагаем пользователю удалить файл
-	removeFile := getUserInput("Хотите удалить файл start.after? (y/n): ")
-	if strings.ToLower(removeFile) == "y" {
-		fmt.Println("Пытаемся удалить файл start.after...")
-
-		// Создаем новую сессию для удаления файла
-		session, err = conn.NewSession()
-		if err != nil {
-			printError(fmt.Sprintf("Ошибка создания сессии для удаления файла: %v", err))
-			waitForEnter()
-			return
-		}
-		defer func() {
-			if err := session.Close(); err != nil {
-				// Логируем ошибку, но не прерываем выполнение
-				color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-			}
-		}()
-
-		// Удаляем файл
-		cmd = "rm -f /projects/start.after"
-		_, err = session.CombinedOutput(cmd)
-		if err != nil {
-			printError(fmt.Sprintf("Ошибка удаления файла start.after: %v", err))
-		} else {
-			printSuccess("Файл start.after успешно удален")
-
-			// Проверяем, что файл действительно удален
-			session, err = conn.NewSession()
-			if err != nil {
-				printError(fmt.Sprintf("Ошибка создания сессии для проверки удаления: %v", err))
-				waitForEnter()
-				return
-			}
-			defer func() {
-				if err := session.Close(); err != nil {
-					// Логируем ошибку, но не прерываем выполнение
-					color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-				}
-			}()
-
-			cmd = "test -f /projects/start.after && echo 'File still exists' || echo 'File successfully removed'"
-			output, err = session.CombinedOutput(cmd)
-			if err != nil {
-				printError(fmt.Sprintf("Ошибка проверки удаления файла: %v", err))
+		// Запрос на удаление файла
+		if getUserInput("Удалить файл start.after? (y/n): ") == "y" {
+			if _, err := executeCommand("rm -f " + startAfterPath); err != nil {
+				printError(fmt.Sprintf("Ошибка удаления: %v", err))
 			} else {
-				fmt.Printf("Результат проверки: %s", output)
+				printSuccess("Файл успешно удален")
 			}
 		}
 	} else {
-		fmt.Println("Удаление файла start.after отменено")
+		printError("Файл start.after не найден")
 	}
 
-	// Копирование файла start.after из локальной директории на сервер
-	fmt.Println("\nПроверяем наличие локального файла start.after...")
+	// 9. КОПИРОВАНИЕ НОВОГО ФАЙЛА start.after
+	fmt.Println("\n=== Обновление start.after ===")
+
 	localStartAfter := "start.after"
+	if _, err := os.Stat(localStartAfter); err == nil {
+		fmt.Printf("Копирование %s -> %s\n", localStartAfter, startAfterPath)
 
-	if _, err := os.Stat(localStartAfter); os.IsNotExist(err) {
-		printError("Локальный файл start.after не найден в директории с программой")
-	} else {
-		fmt.Println("Локальный файл start.after найден, начинаем копирование...")
-
-		// Создаем новую сессию для копирования
-		session, err = conn.NewSession()
+		session, err := conn.NewSession()
 		if err != nil {
-			printError(fmt.Sprintf("Ошибка создания сессии для копирования: %v", err))
-			waitForEnter()
-			return
-		}
-		defer func() {
-			if err := session.Close(); err != nil {
-				// Логируем ошибку, но не прерываем выполнение
-				color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-			}
-		}()
-
-		remotePath := "/projects/start.after"
-		fmt.Printf("Копируем %s в %s...\n", localStartAfter, remotePath)
-
-		// Используем нашу функцию copyFile
-		if err := copyFile(session, localStartAfter, remotePath); err != nil {
-			printError(fmt.Sprintf("Ошибка копирования файла: %v", err))
+			printError(fmt.Sprintf("Ошибка создания сессии: %v", err))
 		} else {
-			printSuccess("Файл start.after успешно скопирован на сервер")
+			defer closeSession(session)
 
-			// Проверяем, что файл появился на сервере
-			session, err = conn.NewSession()
-			if err != nil {
-				printError(fmt.Sprintf("Ошибка создания сессии для проверки: %v", err))
-				waitForEnter()
-				return
-			}
-			defer func() {
-				if err := session.Close(); err != nil {
-					// Логируем ошибку, но не прерываем выполнение
-					color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-				}
-			}()
-
-			cmd = fmt.Sprintf("ls -la %s", remotePath)
-			output, err = session.CombinedOutput(cmd)
-			if err != nil {
-				printError(fmt.Sprintf("Ошибка проверки файла на сервере: %v", err))
+			if err := copyFile(session, localStartAfter, startAfterPath); err != nil {
+				printError(fmt.Sprintf("Ошибка копирования: %v", err))
 			} else {
-				fmt.Printf("Файл на сервере:\n%s\n", output)
+				printSuccess("Файл успешно обновлен")
 
-				// Выводим первые 10 строк файла для проверки
-				session, err = conn.NewSession()
-				if err != nil {
-					printError(fmt.Sprintf("Ошибка создания сессии для проверки содержимого: %v", err))
-					waitForEnter()
-					return
-				}
-				defer func() {
-					if err := session.Close(); err != nil {
-						// Логируем ошибку, но не прерываем выполнение
-						color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
-					}
-				}()
-
-				cmd = fmt.Sprintf("head -n 10 %s", remotePath)
-				output, err = session.CombinedOutput(cmd)
-				if err != nil {
-					printError(fmt.Sprintf("Ошибка чтения начала файла: %v", err))
+				// Проверка содержимого
+				if output, err := executeCommand("head -n 5 " + startAfterPath); err != nil {
+					printError(fmt.Sprintf("Ошибка проверки: %v", err))
 				} else {
-					fmt.Printf("Первые 10 строк файла:\n%s\n", output)
+					fmt.Printf("Начало файла:\n%s\n", output)
 				}
 			}
 		}
+	} else {
+		printError("Локальный файл start.after не найден")
 	}
 
+	// Завершение работы
+	fmt.Println("\n=== Работа завершена ===")
 	waitForEnter()
 }
