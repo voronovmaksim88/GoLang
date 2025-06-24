@@ -1,4 +1,4 @@
-module kis3-diploy
+module sibplc-ru-diploy
 
 go 1.24.2
 

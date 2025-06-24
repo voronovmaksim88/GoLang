@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -22,12 +23,12 @@ func main() {
 	// Настройка аутентификации по SSH
 	key, err := os.ReadFile("C:\\Users\\Maksim\\.ssh\\id_rsa")
 	if err != nil {
-		log.Fatalf("Невозможно прочитать приватный ключ: %v", err)
+		fatalError(red(fmt.Sprintf("Невозможно прочитать приватный ключ: %v", err)))
 	}
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		log.Fatalf("Невозможно распарсить приватный ключ: %v", err)
+		fatalError(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
 	}
 
 	config := &ssh.ClientConfig{
@@ -42,7 +43,7 @@ func main() {
 	addr := fmt.Sprintf("%s:22", host)
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		log.Fatalf("Невозможно подключиться к SSH-серверу: %v", err)
+		fatalError(red(fmt.Sprintf("Невозможно подключиться к SSH-серверу: %v", err)))
 	}
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -50,7 +51,7 @@ func main() {
 		}
 	}()
 
-	fmt.Println("Успешное подключение к SSH-серверу")
+	fmt.Println(green("Успешное подключение к SSH-серверу"))
 
 	// Выполняем последовательно все необходимые команды
 
@@ -62,22 +63,31 @@ func main() {
 
 	// 2. Собираем контейнеры с помощью docker-compose build
 	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose build"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && docker-compose build"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
-		// Продолжаем выполнение даже при ошибке
 	}
 
 	// 3. Запускаем контейнеры с помощью docker-compose up -d
 	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose up -d"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && docker-compose up -d"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
 	}
 
-	// Создаем читатель для ввода с клавиатуры
-	reader := bufio.NewReader(os.Stdin)
-
-	// Ожидаем нажатия Enter перед завершением
+	// Ожидаем нажатия Enter перед завершением (только при успешном выполнении)
 	fmt.Println(green("\nВсе команды выполнены. Нажмите Enter для выхода..."))
+	waitForEnter()
+}
+
+// Функция для вывода ошибки и ожидания Enter перед выходом
+func fatalError(message string) {
+	fmt.Println(message)
+	waitForEnter()
+	os.Exit(1)
+}
+
+// Ожидание нажатия Enter
+func waitForEnter() {
+	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')
 }
 
@@ -88,12 +98,11 @@ func executeCommand(client *ssh.Client, command string) error {
 		return fmt.Errorf("невозможно создать SSH-сессию: %v", err)
 	}
 	defer func() {
-		if err := session.Close(); err != nil {
-			log.Printf("Ошибка при закрытии SSH-сессии: %v", err)
+		if closeErr := session.Close(); closeErr != nil && closeErr != io.EOF {
+			log.Printf("Ошибка при закрытии SSH-сессии: %v", closeErr)
 		}
 	}()
 
-	// Настройка стандартного вывода и ошибок
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 
