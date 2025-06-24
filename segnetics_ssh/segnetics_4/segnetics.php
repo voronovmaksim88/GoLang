@@ -25,7 +25,7 @@ class SegShm {
 				
 				$vd['type'] = intval($vType);
 				//$vd['addr'] = hexdec($vOff) + (hexdec($vFin) - hexdec($vSt));
-				$vd['addr'] = hexdec($vOff) + 24; // хз почему 24
+				$vd['addr'] = hexdec($vOff) + 48; // sizeof(pthread_mutex_t)=24 for 32bit, =48 for 64bit;
 				$this->vd[$vName] = $vd;
 			}
 		}

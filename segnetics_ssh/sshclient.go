@@ -264,13 +264,30 @@ func main() {
 	// 6. КОПИРОВАНИЕ ФАЙЛОВ
 	fmt.Println("\n=== Копирование файлов ===")
 
+	// Запрашиваем номер контроллера
+	var controllerNum string
+	for {
+		controllerNum = getUserInput("Какая цифра в конце названия контроллера (0 или 4)?: ")
+		if controllerNum == "0" || controllerNum == "4" {
+			break
+		}
+		printError("Некорректный ввод. Допустимые значения: 0 или 4")
+	}
+
 	filesToCopy := []string{"sequencer_v1r6.php", "segnetics.php"}
 	for _, file := range filesToCopy {
-		localPath := filepath.Join(".", file)
+		var localPath string
+
+		// Определяем путь к файлу в зависимости от его типа
+		if file == "segnetics.php" {
+			localPath = filepath.Join(".", "segnetics_"+controllerNum, file)
+		} else {
+			localPath = filepath.Join(".", file)
+		}
 
 		// Проверка локального файла
 		if _, err := os.Stat(localPath); os.IsNotExist(err) {
-			printError(fmt.Sprintf("Локальный файл %s не найден", file))
+			printError(fmt.Sprintf("Локальный файл %s не найден по пути: %s", file, localPath))
 			continue
 		}
 
@@ -285,7 +302,7 @@ func main() {
 		}
 	}
 
-	// 7. РАБОТА С ПРОЕКТАМИ
+	// 7. ПРОВЕРКА директории projects
 	fmt.Println("\n=== Проверка директории projects ===")
 
 	exists, err = checkPathExists("/projects", false)
