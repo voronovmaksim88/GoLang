@@ -312,13 +312,12 @@ func main() {
 	} else if exists {
 		printSuccess("Файл start.after существует")
 
-		// Запрос на удаление файла
-		if getUserInput("Удалить файл start.after? (y/n): ") == "y" {
-			if _, err := executeCommand("rm -f " + startAfterPath); err != nil {
-				printError(fmt.Sprintf("Ошибка удаления: %v", err))
-			} else {
-				printSuccess("Файл успешно удален")
-			}
+		// Автоматически удаляем старый файл без запроса подтверждения
+		fmt.Println("Удаление старого файла start.after...")
+		if _, err := executeCommand("rm -f " + startAfterPath); err != nil {
+			printError(fmt.Sprintf("Ошибка удаления: %v", err))
+		} else {
+			printSuccess("Старый файл успешно удален")
 		}
 	} else {
 		printError("Файл start.after не найден")
