@@ -21,7 +21,7 @@ func printSuccess(message string) {
 
 func waitForEnter() {
 	fmt.Print("\nНажмите Enter для выхода...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
 func getUserInput(prompt string) string {
@@ -90,6 +90,54 @@ func copyFile(session *ssh.Session, localPath string, remotePath string) error {
 	return nil
 }
 
+func copyFileRemote(conn *ssh.Client, localPath, remotePath string) error {
+	session, err := conn.NewSession()
+	if err != nil {
+		return fmt.Errorf("не удалось создать сессию: %v", err)
+	}
+
+	// Используем анонимную функцию для обработки ошибки закрытия сессии
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Можно добавить логирование ошибки, если нужно
+			fmt.Printf("Предупреждение: ошибка при закрытии сессии: %v\n", err)
+		}
+	}()
+
+	// Читаем локальный файл
+	content, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("ошибка чтения файла %s: %v", localPath, err)
+	}
+
+	// Создаем команду для записи файла
+	cmd := fmt.Sprintf("cat > %s", remotePath)
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("ошибка создания stdin pipe: %v", err)
+	}
+
+	// Запускаем команду
+	if err := session.Start(cmd); err != nil {
+		return fmt.Errorf("ошибка запуска команды: %v", err)
+	}
+
+	// Отправляем содержимое файла
+	if _, err := stdin.Write(content); err != nil {
+		return fmt.Errorf("ошибка записи в stdin: %v", err)
+	}
+
+	// Закрываем stdin и ждем завершения команды
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("ошибка закрытия stdin: %v", err)
+	}
+	if err := session.Wait(); err != nil {
+		return fmt.Errorf("ошибка ожидания завершения команды: %v", err)
+	}
+
+	return nil
+}
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -106,7 +154,7 @@ func main() {
 
 	for {
 		// Получаем данные от пользователя
-		host := getDefaultInput("Введите IP-адрес устройства", "192.168.88.32")
+		host := getDefaultInput("Введите IP-адрес устройства", "192.168.88.60")
 		user := getDefaultInput("Введите имя пользователя", "root")
 		password := getDefaultInput("Введите пароль", "segnetics")
 
@@ -128,7 +176,12 @@ func main() {
 	}
 	defer func() {
 		if conn != nil {
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				// Логируем ошибку закрытия соединения
+				fmt.Printf("Предупреждение: ошибка при закрытии SSH соединения: %v\n", err)
+				// Или можно использовать color для выделения сообщения
+				color.Yellow("Предупреждение: ошибка при закрытии SSH соединения: %v", err)
+			}
 		}
 	}()
 
@@ -145,7 +198,12 @@ func main() {
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	fmt.Println("Сессия создана, пытаемся выполнить команду...")
 
@@ -179,7 +237,12 @@ func main() {
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	cmd = "cat /proc/version"
 	fmt.Printf("Отправляем команду: %s\n", cmd)
@@ -203,7 +266,12 @@ func main() {
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	// Проверяем существование директории
 	cmd = "test -d /etc/opt && echo 'Directory exists' || echo 'Directory does not exist'"
@@ -233,38 +301,33 @@ func main() {
 			continue
 		}
 
-		// Создаем новую сессию для каждого файла
-		session, err = conn.NewSession()
-		if err != nil {
-			printError(fmt.Sprintf("Не удалось создать сессию для копирования %s: %v", file, err))
-			continue
-		}
-		defer session.Close()
-
-		// Получаем абсолютный путь к локальному файлу
 		localPath := filepath.Join(".", file)
 		remotePath := "/etc/opt/" + file // Используем Unix-стиль пути
 
 		fmt.Printf("Копируем %s в %s...\n", localPath, remotePath)
 
-		// Копируем файл
-		if err := copyFile(session, localPath, remotePath); err != nil {
+		// Используем новую функцию для копирования
+		if err := copyFileRemote(conn, localPath, remotePath); err != nil {
 			printError(fmt.Sprintf("Ошибка копирования файла %s: %v", file, err))
 		} else {
 			printSuccess(fmt.Sprintf("Файл %s успешно скопирован", file))
 		}
 	}
 
-	fmt.Println("\nВыводим список файлов в /etc/opt:")
-
 	// Создаем новую сессию для вывода списка файлов
+	fmt.Println("\nВыводим список файлов в /etc/opt:")
 	session, err = conn.NewSession()
 	if err != nil {
 		printError(fmt.Sprintf("Ошибка создания сессии для вывода списка файлов: %v", err))
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	// Выполняем команду ls
 	cmd = "ls -l /etc/opt"
@@ -286,7 +349,12 @@ func main() {
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	// Проверяем существование директории projects
 	cmd = "test -d /projects && echo 'Directory projects exists' || echo 'Directory projects does not exist'"
@@ -314,7 +382,12 @@ func main() {
 		waitForEnter()
 		return
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			// Логируем ошибку, но не прерываем выполнение
+			color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+		}
+	}()
 
 	// Проверяем существование файла start.after
 	cmd = "test -f /projects/start.after && echo 'File start.after exists' || echo 'File start.after does not exist'"
@@ -343,7 +416,12 @@ func main() {
 			waitForEnter()
 			return
 		}
-		defer session.Close()
+		defer func() {
+			if err := session.Close(); err != nil {
+				// Логируем ошибку, но не прерываем выполнение
+				color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+			}
+		}()
 
 		// Удаляем файл
 		cmd = "rm -f /projects/start.after"
@@ -360,7 +438,12 @@ func main() {
 				waitForEnter()
 				return
 			}
-			defer session.Close()
+			defer func() {
+				if err := session.Close(); err != nil {
+					// Логируем ошибку, но не прерываем выполнение
+					color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+				}
+			}()
 
 			cmd = "test -f /projects/start.after && echo 'File still exists' || echo 'File successfully removed'"
 			output, err = session.CombinedOutput(cmd)
@@ -390,7 +473,12 @@ func main() {
 			waitForEnter()
 			return
 		}
-		defer session.Close()
+		defer func() {
+			if err := session.Close(); err != nil {
+				// Логируем ошибку, но не прерываем выполнение
+				color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+			}
+		}()
 
 		remotePath := "/projects/start.after"
 		fmt.Printf("Копируем %s в %s...\n", localStartAfter, remotePath)
@@ -408,7 +496,12 @@ func main() {
 				waitForEnter()
 				return
 			}
-			defer session.Close()
+			defer func() {
+				if err := session.Close(); err != nil {
+					// Логируем ошибку, но не прерываем выполнение
+					color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+				}
+			}()
 
 			cmd = fmt.Sprintf("ls -la %s", remotePath)
 			output, err = session.CombinedOutput(cmd)
@@ -424,7 +517,12 @@ func main() {
 					waitForEnter()
 					return
 				}
-				defer session.Close()
+				defer func() {
+					if err := session.Close(); err != nil {
+						// Логируем ошибку, но не прерываем выполнение
+						color.Yellow("Предупреждение: ошибка при закрытии сессии: %v", err)
+					}
+				}()
 
 				cmd = fmt.Sprintf("head -n 10 %s", remotePath)
 				output, err = session.CombinedOutput(cmd)
