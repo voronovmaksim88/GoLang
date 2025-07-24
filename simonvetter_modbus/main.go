@@ -31,7 +31,17 @@ func runModbus() (err error) {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
+	// Отложенное закрытие соединения с обработкой ошибки
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			if err == nil {
+				err = closeErr
+			} else {
+				log.Printf("Ошибка при закрытии соединения: %v", closeErr)
+			}
+		}
+	}()
 
 	// Открываем соединение
 	err = client.Open()
@@ -59,13 +69,15 @@ func main() {
 		"BUILD_D\t0x010B\tuint16\tтолько чтение\tдень\n" +
 		"BUILD_H\t0x010C\tuint16\tтолько чтение\tчас\n" +
 		"BUILD_m\t0x010D\tuint16\tтолько чтение\tминута\n" +
-		"BUILD_S\t0x010E\tuint16\tтолько чтение\tсекунда\n" +
-		"")
+		"BUILD_S\t0x010E\tuint16\tтолько чтение\tсекунда")
 
-	// Отложенный вызов ожидания Enter
+	// Отложенный вызов ожидания Enter с обработкой ошибки
 	defer func() {
 		log.Println("Нажмите Enter для выхода...")
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
+		_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
+		if err != nil {
+			log.Printf("Ошибка при чтении ввода: %v", err)
+		}
 	}()
 
 	// Выполнение Modbus-запроса
