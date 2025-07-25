@@ -54,7 +54,7 @@ func runModbus() (err error) {
 		return err
 	}
 
-	regs, err := client.ReadRegisters(0x0109, 6, modbus.HOLDING_REGISTER)
+	regs, err := client.ReadRegisters(0x0109, 6, modbus.INPUT_REGISTER)
 	if err != nil {
 		return err
 	}
