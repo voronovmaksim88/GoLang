@@ -19,8 +19,9 @@ func main() {
 		}
 	}()
 
-	// Создаем функцию для вывода текста зеленым цветом
+	// Создаем функции для вывода текста зеленым и красным цветом
 	green := color.New(color.FgGreen).PrintfFunc()
+	red := color.New(color.FgRed).PrintfFunc()
 
 	// Список возможных COM-портов для проверки
 	ports := []string{
@@ -30,6 +31,9 @@ func main() {
 
 	fmt.Println("Доступные COM-порты:")
 
+	// Счетчик доступных портов
+	availablePorts := 0
+
 	for _, port := range ports {
 		// Пытаемся открыть порт
 		config := &serial.Config{Name: port, Baud: 9600}
@@ -37,10 +41,16 @@ func main() {
 		if err == nil {
 			// Если порт открыт успешно, выводим его имя зеленым цветом
 			green("%s\n", port)
+			availablePorts++
 			// Закрываем порт и обрабатываем ошибку
 			if err := s.Close(); err != nil {
 				fmt.Printf("Ошибка при закрытии порта %s: %v\n", port, err)
 			}
 		}
+	}
+
+	// Если нет доступных портов, выводим сообщение красным цветом
+	if availablePorts == 0 {
+		red("Нет доступных COM-портов.\n")
 	}
 }
