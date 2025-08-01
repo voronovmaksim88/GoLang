@@ -1,4 +1,4 @@
-module MyProg
+module TestCconectToAllMySite
 
 go 1.24
 

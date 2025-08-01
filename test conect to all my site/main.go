@@ -1,4 +1,4 @@
-  package main
+package main
 
 import (
 	"bufio"
@@ -65,9 +65,10 @@ func main() {
 	websites := []Website{
 		{URL: "https://www.sibplc.ru/", DisplayName: "sibplc.ru"},
 		{URL: "http://ovz1.9138995941.me2jm.vps.myjino.ru:49264/", DisplayName: "КИС1"},
-		{URL: "https://kis2test.sibplc.ru/", DisplayName: "КИС2тест"},
-		{URL: "https://kis2work.sibplc.ru/", DisplayName: "КИС2раб"},
-		{URL: "https://sibplc-kis3.ru/", DisplayName: "КИС3раб"},
+		{URL: "https://kis2test.sibplc.ru/", DisplayName: "КИС2 тестовая"},
+		{URL: "https://kis2work.sibplc.ru/", DisplayName: "КИС2 рабочая"},
+		{URL: "https://test.sibplc-kis3.ru/", DisplayName: "КИС3 тестовая"},
+		{URL: "https://sibplc-kis3.ru/", DisplayName: "КИС3 рабочая"},
 		{URL: "https://sibtask.ru/", DisplayName: "sibtask"},
 		{URL: "https://lk.sinlab.ru:3080/comp/", DisplayName: "ecomp"},
 	}
