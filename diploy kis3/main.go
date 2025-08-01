@@ -5,15 +5,45 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"golang.org/x/crypto/ssh"
 )
 
+// selectVersion предлагает пользователю выбрать между тестовой и рабочей версиями
+func selectVersion() (string, error) {
+	fmt.Println("Какую версию обновить?")
+	fmt.Println("0 - Тестовая")
+	fmt.Println("1 - Рабочая")
+
+	reader := bufio.NewReader(os.Stdin)
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("ошибка чтения ввода: %v", err)
+	}
+
+	choice = strings.TrimSpace(choice)
+	switch choice {
+	case "0":
+		return "KIS3_v3r3_test/", nil
+	case "1":
+		return "KIS3_v3r3_prod/", nil
+	default:
+		return "", fmt.Errorf("некорректный выбор: %s. Выберите 0 или 1", choice)
+	}
+}
+
 func main() {
 	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
 	red := color.New(color.FgRed).SprintFunc()
+
+	// Выбор версии для обновления
+	projectPath, err := selectVersion()
+	if err != nil {
+		log.Fatalf("Ошибка выбора версии: %v", err)
+	}
 
 	// Определение адреса и учетных данных SSH-сервера
 	host := "176.124.213.202"
@@ -56,20 +86,20 @@ func main() {
 
 	// 1. Обновляем репозиторий через git pull
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && git pull"); err != nil {
+	if err := executeCommand(client, fmt.Sprintf("cd %s && git pull", projectPath)); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
 	}
 
 	// 2. Собираем контейнеры с помощью docker-compose build
 	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose build"); err != nil {
+	if err := executeCommand(client, fmt.Sprintf("cd %s && docker-compose build", projectPath)); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
 		// Продолжаем выполнение даже при ошибке
 	}
 
 	// 3. Запускаем контейнеры с помощью docker-compose up -d
 	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && docker-compose up -d"); err != nil {
+	if err := executeCommand(client, fmt.Sprintf("cd %s && docker-compose up -d", projectPath)); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
 	}
 
