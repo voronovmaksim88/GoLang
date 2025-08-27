@@ -57,7 +57,7 @@ func main() {
 
 	// 1. Обновляем репозиторий через git pull
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
-	if err := executeCommand(client, "cd KIS3_v3r3/ && git pull"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && git pull"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
 	}
 
