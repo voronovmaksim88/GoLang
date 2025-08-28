@@ -57,19 +57,19 @@ func main() {
 
 	// 1. Обновляем репозиторий через git pull
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
-	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && git pull"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/ && git pull"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
 	}
 
 	// 2. Собираем контейнеры с помощью docker-compose build
 	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && docker-compose build"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/ && docker-compose build"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
 	}
 
 	// 3. Запускаем контейнеры с помощью docker-compose up -d
 	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	if err := executeCommand(client, "cd sibplc_ru/sibplc.ru/ && docker-compose up -d"); err != nil {
+	if err := executeCommand(client, "cd sibplc_ru/ && docker-compose up -d"); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
 	}
 
