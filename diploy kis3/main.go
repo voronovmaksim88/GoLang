@@ -63,13 +63,28 @@ func main() {
 		return
 	}
 
+	// Сначала пробуем без пароля
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		fmt.Println(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
-		fmt.Println("Нажмите Enter для завершения...")
+		// Если не получилось, запрашиваем пароль
+		fmt.Print("Введите пароль для SSH ключа: ")
 		reader := bufio.NewReader(os.Stdin)
-		_, _ = reader.ReadString('\n')
-		return
+		passphrase, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println(red(fmt.Sprintf("Ошибка чтения пароля: %v", err)))
+			fmt.Println("Нажмите Enter для завершения...")
+			reader.ReadString('\n')
+			return
+		}
+		passphrase = strings.TrimSpace(passphrase)
+
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
+		if err != nil {
+			fmt.Println(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
+			fmt.Println("Нажмите Enter для завершения...")
+			reader.ReadString('\n')
+			return
+		}
 	}
 
 	config := &ssh.ClientConfig{
