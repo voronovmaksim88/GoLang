@@ -42,7 +42,11 @@ func main() {
 	// Выбор версии для обновления
 	projectPath, err := selectVersion()
 	if err != nil {
-		log.Fatalf("Ошибка выбора версии: %v", err)
+		fmt.Println(red(fmt.Sprintf("Ошибка выбора версии: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
 	// Определение адреса и учетных данных SSH-сервера
@@ -52,12 +56,20 @@ func main() {
 	// Настройка аутентификации по SSH
 	key, err := os.ReadFile("C:\\Users\\Maksim\\.ssh\\id_rsa")
 	if err != nil {
-		log.Fatalf("Невозможно прочитать приватный ключ: %v", err)
+		fmt.Println(red(fmt.Sprintf("Невозможно прочитать приватный ключ: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		log.Fatalf("Невозможно распарсить приватный ключ: %v", err)
+		fmt.Println(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
 	config := &ssh.ClientConfig{
@@ -72,7 +84,11 @@ func main() {
 	addr := fmt.Sprintf("%s:22", host)
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		log.Fatalf("Невозможно подключиться к SSH-серверу: %v", err)
+		fmt.Println(red(fmt.Sprintf("Невозможно подключиться к SSH-серверу: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 	defer func() {
 		if err := client.Close(); err != nil {
