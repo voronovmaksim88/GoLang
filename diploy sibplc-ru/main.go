@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"golang.org/x/crypto/ssh"
@@ -23,12 +24,34 @@ func main() {
 	// Настройка аутентификации по SSH
 	key, err := os.ReadFile("C:\\Users\\Maksim\\.ssh\\id_rsa")
 	if err != nil {
-		fatalError(red(fmt.Sprintf("Невозможно прочитать приватный ключ: %v", err)))
+		fmt.Println(red(fmt.Sprintf("Невозможно прочитать приватный ключ: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		waitForEnter()
+		return
 	}
 
+	// Сначала пробуем без пароля
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		fatalError(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
+		// Если не получилось, запрашиваем пароль
+		fmt.Print("Введите пароль для SSH ключа: ")
+		reader := bufio.NewReader(os.Stdin)
+		passphrase, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println(red(fmt.Sprintf("Ошибка чтения пароля: %v", err)))
+			fmt.Println("Нажмите Enter для завершения...")
+			waitForEnter()
+			return
+		}
+		passphrase = strings.TrimSpace(passphrase)
+
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
+		if err != nil {
+			fmt.Println(red(fmt.Sprintf("Невозможно распарсить приватный ключ: %v", err)))
+			fmt.Println("Нажмите Enter для завершения...")
+			waitForEnter()
+			return
+		}
 	}
 
 	config := &ssh.ClientConfig{
@@ -43,7 +66,10 @@ func main() {
 	addr := fmt.Sprintf("%s:22", host)
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		fatalError(red(fmt.Sprintf("Невозможно подключиться к SSH-серверу: %v", err)))
+		fmt.Println(red(fmt.Sprintf("Невозможно подключиться к SSH-серверу: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		waitForEnter()
+		return
 	}
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -73,16 +99,9 @@ func main() {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
 	}
 
-	// Ожидаем нажатия Enter перед завершением (только при успешном выполнении)
+	// Ожидаем нажатия Enter перед завершением
 	fmt.Println(green("\nВсе команды выполнены. Нажмите Enter для выхода..."))
 	waitForEnter()
-}
-
-// Функция для вывода ошибки и ожидания Enter перед выходом
-func fatalError(message string) {
-	fmt.Println(message)
-	waitForEnter()
-	os.Exit(1)
 }
 
 // Ожидание нажатия Enter
