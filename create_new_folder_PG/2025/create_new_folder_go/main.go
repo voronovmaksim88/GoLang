@@ -3,13 +3,14 @@ package main
 import (
 	"database/sql" // Пакет для работы с базами данных SQL
 	"fmt"          // Пакет для форматированного ввода-вывода
-	"github.com/joho/godotenv"
 	"io"
 	"os"            // Пакет для работы с операционной системой (файлы, переменные окружения)
 	"path/filepath" // Пакет для работы с путями файловой системы
 	"sort"          // Пакет для сортировки данных
 	"strconv"       // Пакет для преобразования строк в числа и обратно
 	"strings"       // Пакет для работы со строками
+
+	"github.com/joho/godotenv"
 
 	"github.com/fatih/color" // Пакет для цветного вывода в консоль
 	_ "github.com/lib/pq"    // Драйвер Postgres
@@ -74,7 +75,7 @@ func main() {
 		printOrders(orders)
 	}
 
-	// Устанавливаем соединение с базой данных MariaDB
+	// Устанавливаем соединение с базой данных PostgreSQL
 	db, err := connectToDB()
 	if err != nil {
 		color.Red("Ошибка подключения к базе данных: %v", err)
@@ -91,7 +92,7 @@ func main() {
 	}()
 
 	// Создаем словарь заказов из базы данных (номер заказа: ID клиента)
-	dbOrderDict, err := createMariaDBOrderDict(db, currentYear)
+	dbOrderDict, err := createPostgresOrderDict(db, currentYear)
 	if err != nil {
 		color.Red("Ошибка создания словаря заказов из БД: %v", err)
 		waitForEnter()
@@ -106,7 +107,7 @@ func main() {
 	}
 
 	// Создаем словарь клиентов из базы данных (ID клиента: имя клиента)
-	clientDict, err := createMariaDBClientDict(db)
+	clientDict, err := createPostgresClientDict(db)
 	if err != nil {
 		color.Red("Ошибка создания словаря клиентов из БД: %v", err)
 		waitForEnter()
@@ -162,7 +163,7 @@ func printOrders(orders map[string]bool) {
 	fmt.Println("")
 }
 
-// connectToDB устанавливает соединение с базой данных MariaDB
+// connectToDB устанавливает соединение с базой данных PostgreSQL
 func connectToDB() (*sql.DB, error) {
 	// Формируем строку подключения из переменных окружения
 	connString := fmt.Sprintf(
@@ -267,7 +268,7 @@ func isDigit(s string) bool {
 }
 
 // createPostgresOrderDict создает словарь заказов из таблицы order (номер заказа: ID клиента)
-func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
+func createPostgresOrderDict(db *sql.DB, year int) (map[string]string, error) {
 	// Создаем словарь для хранения заказов
 	orderDict := make(map[string]string)
 	yearStr := strconv.Itoa(year)
@@ -301,8 +302,8 @@ func createMariaDBOrderDict(db *sql.DB, year int) (map[string]string, error) {
 	return orderDict, nil
 }
 
-// createMariaDBClientDict создает словарь клиентов из таблицы counterparty (ID клиента: имя клиента)
-func createMariaDBClientDict(db *sql.DB) (map[string]string, error) {
+// createPostgresClientDict создает словарь клиентов из таблицы counterparty (ID клиента: имя клиента)
+func createPostgresClientDict(db *sql.DB) (map[string]string, error) {
 	// Создаем словарь для хранения клиентов
 	clientDict := make(map[string]string)
 
@@ -486,7 +487,7 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-// createMissingOrderFolders запрашивает у пользователя создание папок для отсутствующих заказов и завершает программу при ошибке
+// createMissingOrderFolders создаёт папки для отсутствующих заказов и завершает программу при ошибке
 func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string]string, clientDict map[string]string) {
 	// Собираем заказы, которые есть в базе данных, но отсутствуют в папках
 	var missingOrders []string
@@ -494,16 +495,6 @@ func createMissingOrderFolders(folderOrders map[string]bool, dbOrders map[string
 		if _, exists := folderOrders[order]; !exists {
 			missingOrders = append(missingOrders, order)
 		}
-	}
-
-	// Запрашиваем подтверждение на создание папок
-	color.Cyan("Создать папки для отсутствующих заказов? (y/n)")
-	var answer string
-	_, err := fmt.Scanln(&answer)
-	if err != nil || (answer != "y" && answer != "Y") {
-		// Если пользователь отказался или произошла ошибка ввода, выводим сообщение об отмене
-		color.Yellow("Создание папок отменено пользователем")
-		return
 	}
 
 	// Создаём папку для каждого отсутствующего заказа
