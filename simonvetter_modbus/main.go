@@ -3,11 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/simonvetter/modbus"
 	"log"
 	"os"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/simonvetter/modbus"
 )
 
 func runModbus() (err error) {
@@ -64,12 +65,12 @@ func runModbus() (err error) {
 
 func main() {
 	log.Println("Привет друг. Сейчас будем читать регистры из комбайна\n" +
-		"BUILD_Y\t0x0109\tuint16\tтолько чтение\tгод\n" +
-		"BUILD_M\t0x010A\tuint16\tтолько чтение\tмесяц\n" +
-		"BUILD_D\t0x010B\tuint16\tтолько чтение\tдень\n" +
-		"BUILD_H\t0x010C\tuint16\tтолько чтение\tчас\n" +
-		"BUILD_m\t0x010D\tuint16\tтолько чтение\tминута\n" +
-		"BUILD_S\t0x010E\tuint16\tтолько чтение\tсекунда")
+		"BUILD_Y\t 0x0109\t uint16\t только_чтение\t год\n" +
+		"BUILD_M\t 0x010A\t uint16\t только_чтение\t месяц\n" +
+		"BUILD_D\t 0x010B\t uint16\t только_чтение\t день\n" +
+		"BUILD_H\t 0x010C\t uint16\t только_чтение\t час\n" +
+		"BUILD_m\t 0x010D\t uint16\t только_чтение\t минута\n" +
+		"BUILD_S\t 0x010E\t uint16\t только_чтение\t секунда")
 
 	// Отложенный вызов ожидания Enter с обработкой ошибки
 	defer func() {
