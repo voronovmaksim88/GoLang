@@ -433,8 +433,8 @@ func createOrderFolder(folderName string, clientDict map[string]string, dbOrders
 	}
 
 	// Копируем шаблон КП
-	kpTemplate := filepath.Join(currentDir, "КП.xls")
-	kpDestination := filepath.Join(orderDir, "КП", fmt.Sprintf("%s_КП_в1р1.xls", folderName))
+	kpTemplate := filepath.Join(currentDir, "КП.xlsm")
+	kpDestination := filepath.Join(orderDir, "КП", fmt.Sprintf("%s_КП_в1р1.xlsm", folderName))
 	if _, err := os.Stat(kpTemplate); err == nil {
 		if err := copyFile(kpTemplate, kpDestination); err != nil {
 			color.Red("Ошибка копирования шаблона КП для %s: %v", fullFolderName, err)
