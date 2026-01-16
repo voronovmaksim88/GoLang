@@ -168,11 +168,11 @@ func connectToDB() (*sql.DB, error) {
 	// Формируем строку подключения из переменных окружения
 	connString := fmt.Sprintf(
 		"user=%s password=%s host=%s port=%s dbname=%s sslmode=disable",
-		os.Getenv("USER"),
-		os.Getenv("PASS"),
-		os.Getenv("HOST"),
-		os.Getenv("PORT"),
-		os.Getenv("NAME"),
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASS"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
 	)
 
 	// Открываем соединение с базой данных
