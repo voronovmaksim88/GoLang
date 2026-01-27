@@ -26,9 +26,9 @@ func selectVersion() (string, error) {
 	choice = strings.TrimSpace(choice)
 	switch choice {
 	case "0":
-		return "KIS3_v3r3_test/", nil
+		return "KIS3_test/", nil
 	case "1":
-		return "KIS3_v3r3_prod/", nil
+		return "KIS3_prod/", nil
 	default:
 		return "", fmt.Errorf("некорректный выбор: %s. Выберите 0 или 1", choice)
 	}
