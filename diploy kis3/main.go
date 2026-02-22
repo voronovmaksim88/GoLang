@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -128,7 +130,15 @@ func main() {
 	// 2. Запускаем тесты внутри контейнера backend перед деплоем
 	fmt.Println(yellow("\n=== Выполнение backend тестов в контейнере ==="))
 	testCommand := fmt.Sprintf("cd %s && docker compose run --rm --build backend python -m pytest tests -v --tb=short", projectPath)
-	if err := executeCommand(client, testCommand); err != nil {
+	testOutput, err := executeCommandWithOutput(client, testCommand)
+	if err != nil {
+		failedTests := extractFailedTests(testOutput)
+		if len(failedTests) > 0 {
+			fmt.Println(red("Провалены тесты:"))
+			for _, testName := range failedTests {
+				fmt.Println(red("- " + testName))
+			}
+		}
 		fmt.Println(red(fmt.Sprintf("Тесты не прошли: %v", err)))
 		fmt.Println(red("Сборка и деплой остановлены."))
 		fmt.Println("Нажмите Enter для завершения...")
@@ -136,6 +146,7 @@ func main() {
 		_, _ = reader.ReadString('\n')
 		return
 	}
+	fmt.Println(green("Все тесты успешны"))
 
 	// 3. Поднимаем контейнеры с пересборкой образов только после успешных тестов
 	fmt.Println(yellow("\n=== Выполнение docker compose up -d --build ==="))
@@ -172,4 +183,64 @@ func executeCommand(client *ssh.Client, command string) error {
 	session.Stderr = os.Stderr
 
 	return session.Run(command)
+}
+
+// executeCommandWithOutput выполняет SSH-команду, выводит в консоль и сохраняет вывод для анализа.
+func executeCommandWithOutput(client *ssh.Client, command string) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("невозможно создать SSH-сессию: %v", err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Printf("Ошибка при закрытии SSH-сессии: %v", err)
+		}
+	}()
+
+	var output bytes.Buffer
+	writer := io.MultiWriter(os.Stdout, &output)
+	session.Stdout = writer
+	session.Stderr = writer
+
+	err = session.Run(command)
+	return output.String(), err
+}
+
+// extractFailedTests достает имена упавших тестов из вывода pytest.
+func extractFailedTests(output string) []string {
+	failed := make([]string, 0)
+	seen := make(map[string]bool)
+
+	for _, rawLine := range strings.Split(output, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+
+		// Формат verbose: tests/test_file.py::test_name FAILED [...]
+		if strings.Contains(line, "::") && strings.Contains(line, " FAILED") && strings.HasPrefix(line, "tests/") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				name := fields[0]
+				if !seen[name] {
+					seen[name] = true
+					failed = append(failed, name)
+				}
+			}
+		}
+
+		// Формат summary: FAILED tests/test_file.py::test_name - ...
+		if strings.HasPrefix(line, "FAILED ") {
+			fields := strings.Fields(line)
+			if len(fields) > 1 {
+				name := fields[1]
+				if !seen[name] {
+					seen[name] = true
+					failed = append(failed, name)
+				}
+			}
+		}
+	}
+
+	return failed
 }
