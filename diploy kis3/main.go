@@ -119,19 +119,32 @@ func main() {
 	fmt.Println(yellow("\n=== Выполнение git pull ==="))
 	if err := executeCommand(client, fmt.Sprintf("cd %s && git pull", projectPath)); err != nil {
 		fmt.Println(red(fmt.Sprintf("Ошибка выполнения git pull: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
-	// 2. Собираем контейнеры с помощью docker-compose build
-	fmt.Println(yellow("\n=== Выполнение docker-compose build ==="))
-	if err := executeCommand(client, fmt.Sprintf("cd %s && docker-compose build", projectPath)); err != nil {
-		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose build: %v", err)))
-		// Продолжаем выполнение даже при ошибке
+	// 2. Запускаем тесты внутри контейнера backend перед деплоем
+	fmt.Println(yellow("\n=== Выполнение backend тестов в контейнере ==="))
+	testCommand := fmt.Sprintf("cd %s && docker compose run --rm --build backend python -m pytest tests -v --tb=short", projectPath)
+	if err := executeCommand(client, testCommand); err != nil {
+		fmt.Println(red(fmt.Sprintf("Тесты не прошли: %v", err)))
+		fmt.Println(red("Сборка и деплой остановлены."))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
-	// 3. Запускаем контейнеры с помощью docker-compose up -d
-	fmt.Println(yellow("\n=== Выполнение docker-compose up -d ==="))
-	if err := executeCommand(client, fmt.Sprintf("cd %s && docker-compose up -d", projectPath)); err != nil {
-		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker-compose up -d: %v", err)))
+	// 3. Поднимаем контейнеры с пересборкой образов только после успешных тестов
+	fmt.Println(yellow("\n=== Выполнение docker compose up -d --build ==="))
+	if err := executeCommand(client, fmt.Sprintf("cd %s && docker compose up -d --build", projectPath)); err != nil {
+		fmt.Println(red(fmt.Sprintf("Ошибка выполнения docker compose up -d --build: %v", err)))
+		fmt.Println("Нажмите Enter для завершения...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+		return
 	}
 
 	// Создаем читатель для ввода с клавиатуры
